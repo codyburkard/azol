@@ -113,7 +113,7 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_users( self ):
+    def get_all_users( self, abbreviate=True ):
         """Get all users in the directory.
 
         Returns:
@@ -122,12 +122,18 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( "/users?$select=id,displayName" )
+
+        if abbreviate:
+            url_with_filter = "/users?$select=id,displayName"
+        else:
+            url_with_filter = "/users"
+
+        response = self._send_request( url_with_filter )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_service_principals( self ):
+    def get_all_service_principals( self, abbreviate=True ):
         """Get all service principals in the directory.
 
         Returns:
@@ -136,7 +142,13 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( "/servicePrincipals?$select=id,displayName" )
+        
+        if abbreviate:
+            url_with_filter = "/servicePrincipals?$select=id,displayName"
+        else:
+            url_with_filter = "/servicePrincipals"
+        
+        response = self._send_request( url_with_filter )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -376,8 +388,8 @@ class GraphClient( OAuthHTTPClient ):
     #        return self._get_all_graph_objects(response)
     #    raise GraphRequestFailedException()
 
-    def get_service_principals(self, sp_object_id):
-        """Get all service principals.
+    def get_service_principal(self, sp_object_id):
+        """Get service principals.
 
         Returns:
            A list of dictionaries containing service principal properties from Graph
@@ -387,7 +399,7 @@ class GraphClient( OAuthHTTPClient ):
         """
         response = self._send_request( f"/servicePrincipals/{sp_object_id}" )
         if response:
-            return self._get_all_graph_objects(response)
+            return response.json()
         raise GraphRequestFailedException()
 
     def get_all_sp_reply_urls( self ):

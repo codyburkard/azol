@@ -7,7 +7,7 @@ with open("README.md", "r") as f:
 
 setup(
     name='azol',
-    version='0.1.1-beta1',
+    version='0.1.1b3',
     packages=find_packages(),
     url='https://github.com/cdburkard/azol',
     author='Cody Burkard',
