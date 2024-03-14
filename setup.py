@@ -1,13 +1,15 @@
 from setuptools import setup, find_packages
+import os
+
+version = os.environ.get('BUILD_VERSION')
 
 readmeText=""
-
 with open("README.md", "r") as f:
     readmeText+=f.read()
 
 setup(
     name='azol',
-    version='0.1.1b3',
+    version=version,
     packages=find_packages(),
     url='https://github.com/cdburkard/azol',
     author='Cody Burkard',
