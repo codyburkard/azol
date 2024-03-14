@@ -187,7 +187,7 @@ class OAuthHTTPClient:
         self.token_service.switch_client(client_id)
 
 
-    def refresh_to_new_resource(self, oauth_http_client_class):
+    def refresh_to_new_resource(self, oauth_http_client_class, *args, **kwargs):
         """
             Generate a new HTTP Client with a different OAuth Resource, using the current token.
 
@@ -205,7 +205,7 @@ class OAuthHTTPClient:
         """
         rt = self.get_current_refresh_token()
         user = User(refresh_token=rt)
-        client = oauth_http_client_class(tenant=self._tenant, cred=user)
+        client = oauth_http_client_class(*args, tenant=self._tenant, cred=user, **kwargs)
         return client
 
     def _set_current_token(self, token):
