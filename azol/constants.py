@@ -25,7 +25,7 @@ class OAuthResourceIDs:
     Arm="https://management.azure.com/"
     Graph="https://graph.microsoft.com/"
     KeyVault="https://vault.azure.net/"
-    CosmosDB="https://cosmos.azure.com"
+    CosmosDB="https://cosmos.azure.com/"
     AzureDataLake="https://datalake.azure.net/"
     AzureSQL="https://database.windows.net/"
     OneNote="https://onenote.com/"
