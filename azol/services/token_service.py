@@ -89,6 +89,9 @@ class TokenService( object ):
     def switch_client( self, client_id ):
         self.credential_object.set_client_id(client_id)
 
+    def switch_resource( self, resource ):
+        self.oauth_resource=resource
+
     def refresh_token( self ):
         if self.credential_object.credentialType != "user":
             raise Exception("Cannot refresh a token for a non user credential type")

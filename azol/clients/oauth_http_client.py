@@ -186,6 +186,24 @@ class OAuthHTTPClient:
         self._current_token = None
         self.token_service.switch_client(client_id)
 
+    def switch_resource(self, oauth_resource):
+        """
+            Switch the oauth resource used by the HTTP Client. Used to abuse FOCI functionality.
+
+            nullifies current cached access token, but leaves refresh token in the client.
+
+            Note: this will not create a new HTTP client object. The resource id will be used to
+                  attempt to authenticate to the existing base_url of the current HTTP client.
+
+            Vars:
+                - oauth_resource - the new oauth resource id. for example, https://graph.microsoft.com/
+
+            Returns:
+                OAuthHTTPClient subclass
+        """
+        self._current_token = None
+        self._resource=oauth_resource
+        self.token_service.switch_resource(oauth_resource)
 
     def refresh_to_new_resource(self, oauth_http_client_class, *args, **kwargs):
         """
