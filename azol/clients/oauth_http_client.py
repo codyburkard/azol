@@ -208,6 +208,30 @@ class OAuthHTTPClient:
         client = oauth_http_client_class(*args, tenant=self._tenant, cred=user, **kwargs)
         return client
 
+    @classmethod
+    def from_client(cls, client, *args, **kwargs):
+        """
+            Generate a new HTTP Client with a different OAuth Resource, using the current client class.
+
+            Use this class to switch from, for example, a GraphClient to an ArmClient.
+            Nullifies current cached access token, but leaves refresh token in client.
+
+            Note: alternative to "refresh_to_new_resource" of an active client, but results in the same.
+
+            Vars:
+                - client - OAuthHTTP child class that will be used to instantiate the 
+                              new class. Note that this must be a valid
+                              OAuth HTTP child class. For example, ArmClient, GraphClient,
+                              or KeyVaultClient
+
+            Returns:
+                OAuthHTTPClient subclass instance
+        """
+        rt = client.get_current_refresh_token()
+        user = User(refresh_token=rt)
+        newClass = cls(*args, tenant=client._tenant, cred=user, **kwargs)
+        return newClass
+
     def _set_current_token(self, token):
         """
             internal: Set the current token
