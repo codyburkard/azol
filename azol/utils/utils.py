@@ -5,6 +5,14 @@ import base64
 import time
 import requests
 
+def string_between(whole_string, start_string, end_string, include_start=False):
+    i=whole_string.index(start_string)
+    z=whole_string[i:].index(end_string)+i
+    if not include_start:
+        i=i+len(start_string)
+    sub_string=whole_string[i:z]
+    return sub_string
+
 def get_tenant_id( tenant_name ):
     """
         Call the openid-configuration of a domain name to check if it exists in Entra ID as a tenant

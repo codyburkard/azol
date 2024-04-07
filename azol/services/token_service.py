@@ -4,13 +4,18 @@
 """
 import logging
 import uuid
+import json
 from time import sleep
 import requests
+import getpass
+import urllib.parse
+from html.parser import HTMLParser
 from azol.constants import IDENTITYPLATFORMURL, DEFAULTSCOPE
-from azol.utils import is_token_expired, parse_jwt
+from azol.utils import is_token_expired, parse_jwt, string_between
 from azol.caches import LocalTokenCache, InMemoryTokenCache
-from azol.constants import OAUTHFLOWS
+from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris
 from copy import deepcopy
+from azol.utils.auth_utils import start_azure_portal_login, end_azure_portal_login
 
 class IdentityPlatformRequestFailedException(Exception):
     """
@@ -53,6 +58,7 @@ class TokenService( object ):
         self._register_flow( OAUTHFLOWS.REFRESH_TOKEN , self._refresh_token_flow )
         self._register_flow( OAUTHFLOWS.DEVICE_CODE, self._device_code )
         self._register_flow( OAUTHFLOWS.RAW_TOKEN, self._raw_token )
+        self._register_flow( OAUTHFLOWS.AUTHORIZATION_CODE, self._authorization_code)
         if azol_id is None:
             azol_id = uuid.uuid4()
         self._id = azol_id
@@ -369,6 +375,403 @@ class TokenService( object ):
                 "flow_type": "delegated"
             }
             return new_token_data
+
+    def _authorization_code( self ):
+        """
+            authorization code flow
+
+            This flow defaults to an idp-initiated login flow. If a client is used that does not
+            support idp-initiated flows, it will fail by default. However, some clients such as 
+            Azure Portal are supported by Azol, and Azol will interrupt the login to force an
+            SP-initiated flow. The supported clients that only support SP intiated flows include:
+
+              - Azure Portal
+
+            Returns: dictionary containing token data
+        """
+        if OAUTHFLOWS.AUTHORIZATION_CODE not in self.credential_object.supportedOAuthFlows:
+            logging.error( "credential type of %s does not support OAuth flow of "
+                          "type authorization_code.", self.credential_object )
+            raise Exception( "Credential does not support OAuth Flow" )
+        
+        supported_SP_initiated_clients={
+            FOCIClients.AzurePortal: [start_azure_portal_login, end_azure_portal_login]
+        }
+
+        openid_scope = "openid"
+        profile_scope = "profile"
+        offline_access_scope = "offline_access"
+        extension = ""
+        if self.openid_scope:
+            extension+=f" {openid_scope}"
+        if self.profile_scope:
+            extension+=f" {profile_scope}"
+        if self.offline_access_scope:
+            extension+=f" {offline_access_scope}"
+
+        if self.default_scope:
+            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            extended_scope_string=scope_string+extension
+        else:
+            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            scope_string = " ".join(expanded_scopes)
+            extended_scope_string=scope_string+extension
+
+        client_id=self.credential_object.get_client_id()
+
+        # interrupt login if it is a supported SP-initiated-only client.
+        if client_id in supported_SP_initiated_clients.keys():
+            SP_init_func=supported_SP_initiated_clients[client_id][0]
+            sp_init=SP_init_func() # returns sp_login_model
+
+            resp=requests.get(sp_init.login_uri) # this is login.microsoftonline.com
+
+        else:
+
+            response_type="code"
+            scope="openid profile"
+            tenant=self._tenant_id
+
+            queryParams= {
+                "redirect_uri": self.credential_object._redirect_uri,
+                "response_type": response_type,
+                "scope": extended_scope_string,
+                "response_mode": "form_post",
+                "client_id": client_id,
+                "code_challenge":"YTFjNjI1OWYzMzA3MTI4ZDY2Njg5M2RkNmVjNDE5YmE",
+                "code_challenge_method":"plain"
+            }
+            resp=requests.get(f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize", params=queryParams, allow_redirects=False)
+
+        # Get the login configurations for the client and tenant
+        config_text=string_between(resp.text, "$Config=", ";\n//]]>")
+        config=json.loads(config_text)
+
+        # Extract the ctx token, flow token, and canary from the client configurations
+        ctx=config["sCtx"]
+        flow=config["sFT"]
+        canary=config["apiCanary"]
+
+        headers={
+            "Canary": canary
+        }
+
+        data={
+            "username": self.credential_object.get_username(),
+            "isOtherIdpSupported": "true",
+            "checkPhones": "false",
+            "isRemoteNGCSupported": "false",
+            "isCookieBannerShown": "false",
+            "isFidoSupported": "false",
+            "originalRequest": ctx,
+            "forceotclogin": "false",
+            "isExternalFederationDisallowed": "false",
+            "isRemoteConnectSupported": "false",
+            "federationFlags": "0",
+            "isSignup": "false",
+            "isAccessPassSupported": "true",
+            "flowToken": flow,
+            "Country": "NO"
+        }
+
+        resp=requests.post("https://login.microsoftonline.com/common/GetCredentialType", json=data, headers=headers, allow_redirects=False)
+
+        userLoginParams=resp.json()
+        flow=userLoginParams["FlowToken"]
+        canary=userLoginParams["apiCanary"]
+        hasPassword=userLoginParams["Credentials"]["HasPassword"]
+        while True:
+            if hasPassword:
+                password = getpass.getpass('Password:')
+
+            data={
+                "login": self.credential_object.get_username(),
+                "loginfmt": self.credential_object.get_username(),
+                "passwd": password,
+                "ctx": ctx,
+                "flowToken": flow,
+                "LoginOptions": 3
+            }
+
+            resp=requests.post("https://login.microsoftonline.com/common/login", data=data, allow_redirects=False)
+
+            config_text=string_between(resp.text, "$Config=", ";\n//]]>")
+            config=json.loads(config_text)
+            if "sErrorCode" in config.keys():
+                if config["sErrorCode"] == "50126":
+                    print("Wrong password. Try again.")
+            else:
+                break
+
+        flow=config["sFT"]
+        canary=config["apiCanary"]
+        ctx=config["sCtx"]
+
+        supported_mfa_methods=["PhoneAppNotification", "PhoneAppOTP", "OneWaySMS"]
+
+        mfa_option_list=config["arrUserProofs"]
+
+        options=[method["authMethodId"] for method in mfa_option_list ]
+
+        option_list=list(map(str, range(len(options))))
+
+        mfa_option_dict=dict(zip(option_list, options))
+
+        text="Which MFA method would you like to pick?\n"
+        for number, option in mfa_option_dict.items():
+            if option not in supported_mfa_methods:
+                text += f"{number}: {option}(not supported)\n"
+            else:
+                text += f"{number}: {option}\n"
+
+        text += "\n"
+
+        res=input(text)
+        while True:
+            if res not in option_list:
+                print("Please pick a valid option...")
+                res=input()
+                continue
+            if mfa_option_dict[res] not in supported_mfa_methods:
+                print("Please pick a supported MFA option...")
+                res=input()
+                continue
+            break
+
+
+        mfaMethod=mfa_option_dict[res]
+
+        # Start the authentication process.
+        # Spoof the Edge user agent. Endpoint throws "Bad Reputation" error if python requests user agent is used.
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0" 
+        }
+
+        data={  
+            "AuthMethodId":mfaMethod,
+            "Method": "BeginAuth",
+            "ctx": ctx,
+            "flowToken": flow
+        }
+
+        resp=requests.post("https://login.microsoftonline.com/common/SAS/BeginAuth", json=data, headers=headers, allow_redirects=False)
+
+        results=resp.json()
+        if not results["Success"]:
+            print(f"error while beginning mfa process. error: {results['Message']}. Exiting...")
+            exit()
+
+
+        # Based on the Auth method, complete MFA
+        match mfaMethod:
+            case "PhoneAppNotification":
+                MFAChallenge=results["Entropy"]
+                print(f"Please respond to the prompt on the authenticator app with the following number: {MFAChallenge}")
+
+                while True:
+                    flow=results["FlowToken"]
+                    ctx=results["Ctx"]
+                    sessionId=results["SessionId"]
+
+                    query={
+                        "authMethodId":mfaMethod
+                    }
+
+                    headers={
+                        "X-Ms-Ctx": ctx,
+                        "X-Ms-Flowtoken": flow,
+                        "X-Ms-Sessionid": sessionId,
+                        "Canary": canary
+                    }
+
+                    resp=requests.get( "https://login.microsoftonline.com/common/SAS/EndAuth", headers=headers, params=query, allow_redirects=False )
+
+                    results=resp.json()
+                    if results["Success"]:
+                        break
+                    sleep(3)
+
+            case "PhoneAppOTP":
+
+                poll_count=0
+
+                while True:
+                    poll_count+=1
+                    flow=results["FlowToken"]
+                    ctx=results["Ctx"]
+                    sessionId=results["SessionId"]
+                    otp=input("Please enter an OTP from your phone authenticator app: ")
+                    headers={
+                        "Canary": canary
+                    }
+
+                    data={
+                        "Method": "EndAuth",
+                        "Ctx": ctx,
+                        "FlowToken": flow,
+                        "AuthMethodId": mfaMethod,
+                        "AdditionalAuthData": otp,
+                        "pollCount": poll_count,
+                        "SessionId": sessionId
+                    }
+
+                    resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
+
+                    results=resp.json()
+                    if results["Success"]:
+                        break
+                    else:
+                        print(f"Error: {results['Message']}")
+
+            case "OneWaySMS":
+
+                poll_count=0
+
+                while True:
+                    poll_count+=1
+                    flow=results["FlowToken"]
+                    ctx=results["Ctx"]
+                    sessionId=results["SessionId"]
+
+                    otp=input("Please enter the code from the SMS: ")
+
+                    headers={
+                        "Canary": canary
+                    }
+
+                    data={
+                        "Method": "EndAuth",
+                        "Ctx": ctx,
+                        "FlowToken": flow,
+                        "AuthMethodId": mfaMethod,
+                        "AdditionalAuthData": otp,
+                        "pollCount": poll_count,
+                        "SessionId": sessionId
+                    }
+
+                    resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
+
+                    results=resp.json()
+                    if results["Success"]:
+                        break
+                    else:
+                        print(f"Error: {results['Message']}")
+            case _:
+                print( f"MFA Type {mfaMethod} not supported by azol. exiting")
+                exit()
+
+        flow=results["FlowToken"]
+        ctx=results["Ctx"]
+        sessionId=results["SessionId"]
+
+        data={
+            "request": ctx,
+            "login": self.credential_object.get_username(),
+            "flowToken": flow,
+            "mfaAuthMethod": mfaMethod,
+            "type":22
+        }
+
+        resp=requests.post( "https://login.microsoftonline.com/common/SAS/ProcessAuth", data=data, allow_redirects=False)
+
+        #look for kmsi interrupt. If no interrupt, eat exception and continue
+        try:
+            config_text=string_between(resp.text, "$Config=", ";\n//]]>")
+
+            config=json.loads(config_text)
+            flow=config["sFT"]
+            canary=config["apiCanary"]
+            ctx=config["sCtx"]
+            pgid=config["pgid"]
+
+            # If Keep Me Signed In(KMSI) interrupt, send "yes"
+            if pgid=="KmsiInterrupt":
+                data={
+                    "ctx": ctx,
+                    "flowToken": flow,
+                    "LoginOptions": 1
+                }
+
+                # kmsi = keep me signed in
+                resp=requests.post("https://login.microsoftonline.com/kmsi", data=data, allow_redirects=False)
+        except ValueError:
+            pass
+
+        secrets={}
+
+        class SimpleParser(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+
+                name=None
+                value=None
+                if tag != "input": return
+                for attr in attrs:
+                    if attr[0] == "name":
+                        name=attr[1]
+                    if attr[0] == "value":
+                        value=attr[1]
+                if name is not None and value is not None:
+                    secrets[name]=value
+
+        parser = SimpleParser()
+        parser.feed(resp.text)
+
+        code=secrets["code"]
+        if "state" in secrets.keys():
+            state=urllib.parse.unquote(secrets["state"])
+        if "id_token" in secrets.keys():
+            id_token=secrets["id_token"]
+
+        # if SP-initiated, we need to send the code to the SP. Else, send code to IDP
+        if client_id in supported_SP_initiated_clients.keys():
+            SP_complete_login_func=supported_SP_initiated_clients[client_id][1]
+
+            sp_login_output=SP_complete_login_func(sp_init.args, code, state, id_token)
+
+            code=sp_login_output
+
+            data={
+                "client_id": client_id,
+                "code": code,
+                "scope": extended_scope_string,
+                "grant_type":"authorization_code"
+            }
+
+            headers={
+                "origin": "http://localhost"
+            }
+
+            resp=requests.post(f"https://login.microsoftonline.com/{self._tenant_id}/oauth2/v2.0/token", data=data, allow_redirects=False, headers=headers)
+
+        else:
+            data={
+                "client_id": client_id,
+                "code": code,
+                "scope": extended_scope_string,
+                "grant_type":"authorization_code",
+                "redirect_uri": self.credential_object._redirect_uri,
+                "code_verifier": "YTFjNjI1OWYzMzA3MTI4ZDY2Njg5M2RkNmVjNDE5YmE"
+            }
+
+            headers={
+                "origin": "http://localhost"
+            }
+
+            resp=requests.post(f"https://login.microsoftonline.com/{self._tenant_id}/oauth2/v2.0/token", data=data, allow_redirects=False, headers=headers)
+
+
+        json_response=resp.json()
+        new_token_data = {
+            "access_token": json_response["access_token"],
+            "refresh_token": json_response["refresh_token"],
+            "flow_type": "delegated"
+        }
+
+        # start refreshing tokens in the http client instead of re-authenticating
+        self.oauth_flow=OAUTHFLOWS.REFRESH_TOKEN
+
+        return new_token_data
 
     def _device_code( self ):
         """
