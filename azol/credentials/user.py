@@ -1,7 +1,7 @@
 """A module containing the User credential class"""
 import logging
 
-from azol.constants import FOCIClients
+from azol.constants import FOCIClients, known_client_redirect_uris
 from azol.credentials.entraid_credential import EntraIdCredential
 
 class User( EntraIdCredential ):
@@ -10,12 +10,14 @@ class User( EntraIdCredential ):
         or a username/password combo is stolen
     """
 
-    supportedOAuthFlows = [ "refresh_token", "device_code" ]
+    supportedOAuthFlows = [ "refresh_token", "device_code", "authorization_code" ]
     credentialType="user"
-    default_oauth_flow="device_code"
+    default_oauth_flow="authorization_code"
 
     def __init__( self, username=None, refresh_token=None,
-                  client_id=FOCIClients.MicrosoftAzurePowershell, *args, **kwargs ):
+                  client_id=FOCIClients.AzurePortal,
+                  redirect_uri=known_client_redirect_uris[FOCIClients.AzurePortal], 
+                  *args, **kwargs ):
         """
             User objects always have a username, pasword and refresh token. 
             However, sometimes some or all of these are unknown
@@ -33,6 +35,7 @@ class User( EntraIdCredential ):
         self._refresh_token=refresh_token
 
         self._client_id=client_id
+        self._redirect_uri=redirect_uri
 
     def username_is_known( self ):
         """
@@ -57,6 +60,14 @@ class User( EntraIdCredential ):
             Returns: string containing the raw refresh token, or None
         """
         return self._refresh_token
+
+    def get_username( self ):
+        """
+            Get the username of the user object
+
+            Returns: username (string)
+        """
+        return self._username
 
     def set_username( self, username ):
         """

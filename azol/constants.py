@@ -52,6 +52,7 @@ class OAUTHFLOWS:
     DEVICE_CODE="device_code"
     REFRESH_TOKEN="refresh_token"
     RAW_TOKEN="raw_token"
+    AUTHORIZATION_CODE="authorization_code"
 
 @dataclass(frozen=True)
 class FOCIClients:
@@ -60,6 +61,7 @@ class FOCIClients:
 
         Taken from here: https://github.com/secureworks/family-of-client-ids-research/blob/main/known-foci-clients.csv
     """
+    AzurePortal="c44b4083-3bb0-49c1-b47d-974e53cbdf3c"
     Office365Management="00b41c95-dab0-4487-9791-b9d2c32c80f2"
     MicrosoftAzurePowershell="1950a258-227b-4e31-a9cf-717495945fc2"
     MicrosoftAzureCLI="04b07795-8ddb-461a-bbee-02f9e1bf7b46"
@@ -97,6 +99,13 @@ class FOCIClients:
     MicrosoftEdgeEnterpriseNewTabPage="d7b530a4-7680-4c23-a8bf-c52c121d2e87"
     MicrosoftDefenderForMobile="dd47d17a-3194-4d86-bfd5-c6ae6f5651e3"
     OutlookLite="e9b154d0-7658-433b-bb25-6b8e0a8a7c59"
+
+known_client_redirect_uris={
+    "c44b4083-3bb0-49c1-b47d-974e53cbdf3c": "https://portal.azure.com/signin/index/",
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264":"https://login.microsoftonline.com/common/oauth2/nativeclient",
+    "1950a258-227b-4e31-a9cf-717495945fc2": "http://localhost:8400",
+    "04b07795-8ddb-461a-bbee-02f9e1bf7b46": "http://localhost:21282"
+}
 
 @dataclass(frozen=True)
 class GraphAPIPermissions:
