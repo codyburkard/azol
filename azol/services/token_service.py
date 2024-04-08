@@ -494,209 +494,218 @@ class TokenService( object ):
             }
 
             resp=requests.post("https://login.microsoftonline.com/common/login", data=data, allow_redirects=False)
-
-            config_text=string_between(resp.text, "$Config=", ";\n//]]>")
-            config=json.loads(config_text)
-            if "sErrorCode" in config.keys():
-                if config["sErrorCode"] == "50126":
-                    print("Wrong password. Try again.")
-            else:
+            
+            # if an exception occurs, there is probably no MFA requirement. code is returned in a form_post
+            try:
+                config_text=string_between(resp.text, "$Config=", ";\n//]]>")
+                config=json.loads(config_text)
+                if "sErrorCode" in config.keys():
+                    if config["sErrorCode"] == "50126":
+                        print("Wrong password. Try again.")
+                else:
+                    break
+            except:
+                require_mfa=False
                 break
 
-        flow=config["sFT"]
-        canary=config["apiCanary"]
-        ctx=config["sCtx"]
+        if "arrUserProofs" in config.keys():
+            require_mfa=True
 
-        supported_mfa_methods=["PhoneAppNotification", "PhoneAppOTP", "OneWaySMS"]
-
-        mfa_option_list=config["arrUserProofs"]
-
-        options=[method["authMethodId"] for method in mfa_option_list ]
-
-        option_list=list(map(str, range(len(options))))
-
-        mfa_option_dict=dict(zip(option_list, options))
-
-        text="Which MFA method would you like to pick?\n"
-        for number, option in mfa_option_dict.items():
-            if option not in supported_mfa_methods:
-                text += f"{number}: {option}(not supported)\n"
-            else:
-                text += f"{number}: {option}\n"
-
-        text += "\n"
-
-        res=input(text)
-        while True:
-            if res not in option_list:
-                print("Please pick a valid option...")
-                res=input()
-                continue
-            if mfa_option_dict[res] not in supported_mfa_methods:
-                print("Please pick a supported MFA option...")
-                res=input()
-                continue
-            break
-
-
-        mfaMethod=mfa_option_dict[res]
-
-        # Start the authentication process.
-        # Spoof the Edge user agent. Endpoint throws "Bad Reputation" error if python requests user agent is used.
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0" 
-        }
-
-        data={  
-            "AuthMethodId":mfaMethod,
-            "Method": "BeginAuth",
-            "ctx": ctx,
-            "flowToken": flow
-        }
-
-        resp=requests.post("https://login.microsoftonline.com/common/SAS/BeginAuth", json=data, headers=headers, allow_redirects=False)
-
-        results=resp.json()
-        if not results["Success"]:
-            print(f"error while beginning mfa process. error: {results['Message']}. Exiting...")
-            exit()
-
-
-        # Based on the Auth method, complete MFA
-        match mfaMethod:
-            case "PhoneAppNotification":
-                MFAChallenge=results["Entropy"]
-                print(f"Please respond to the prompt on the authenticator app with the following number: {MFAChallenge}")
-
-                while True:
-                    flow=results["FlowToken"]
-                    ctx=results["Ctx"]
-                    sessionId=results["SessionId"]
-
-                    query={
-                        "authMethodId":mfaMethod
-                    }
-
-                    headers={
-                        "X-Ms-Ctx": ctx,
-                        "X-Ms-Flowtoken": flow,
-                        "X-Ms-Sessionid": sessionId,
-                        "Canary": canary
-                    }
-
-                    resp=requests.get( "https://login.microsoftonline.com/common/SAS/EndAuth", headers=headers, params=query, allow_redirects=False )
-
-                    results=resp.json()
-                    if results["Success"]:
-                        break
-                    sleep(3)
-
-            case "PhoneAppOTP":
-
-                poll_count=0
-
-                while True:
-                    poll_count+=1
-                    flow=results["FlowToken"]
-                    ctx=results["Ctx"]
-                    sessionId=results["SessionId"]
-                    otp=input("Please enter an OTP from your phone authenticator app: ")
-                    headers={
-                        "Canary": canary
-                    }
-
-                    data={
-                        "Method": "EndAuth",
-                        "Ctx": ctx,
-                        "FlowToken": flow,
-                        "AuthMethodId": mfaMethod,
-                        "AdditionalAuthData": otp,
-                        "pollCount": poll_count,
-                        "SessionId": sessionId
-                    }
-
-                    resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
-
-                    results=resp.json()
-                    if results["Success"]:
-                        break
-                    else:
-                        print(f"Error: {results['Message']}")
-
-            case "OneWaySMS":
-
-                poll_count=0
-
-                while True:
-                    poll_count+=1
-                    flow=results["FlowToken"]
-                    ctx=results["Ctx"]
-                    sessionId=results["SessionId"]
-
-                    otp=input("Please enter the code from the SMS: ")
-
-                    headers={
-                        "Canary": canary
-                    }
-
-                    data={
-                        "Method": "EndAuth",
-                        "Ctx": ctx,
-                        "FlowToken": flow,
-                        "AuthMethodId": mfaMethod,
-                        "AdditionalAuthData": otp,
-                        "pollCount": poll_count,
-                        "SessionId": sessionId
-                    }
-
-                    resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
-
-                    results=resp.json()
-                    if results["Success"]:
-                        break
-                    else:
-                        print(f"Error: {results['Message']}")
-            case _:
-                print( f"MFA Type {mfaMethod} not supported by azol. exiting")
-                exit()
-
-        flow=results["FlowToken"]
-        ctx=results["Ctx"]
-        sessionId=results["SessionId"]
-
-        data={
-            "request": ctx,
-            "login": self.credential_object.get_username(),
-            "flowToken": flow,
-            "mfaAuthMethod": mfaMethod,
-            "type":22
-        }
-
-        resp=requests.post( "https://login.microsoftonline.com/common/SAS/ProcessAuth", data=data, allow_redirects=False)
-
-        #look for kmsi interrupt. If no interrupt, eat exception and continue
-        try:
-            config_text=string_between(resp.text, "$Config=", ";\n//]]>")
-
-            config=json.loads(config_text)
+        if require_mfa:
             flow=config["sFT"]
             canary=config["apiCanary"]
             ctx=config["sCtx"]
-            pgid=config["pgid"]
 
-            # If Keep Me Signed In(KMSI) interrupt, send "yes"
-            if pgid=="KmsiInterrupt":
-                data={
-                    "ctx": ctx,
-                    "flowToken": flow,
-                    "LoginOptions": 1
-                }
+            supported_mfa_methods=["PhoneAppNotification", "PhoneAppOTP", "OneWaySMS"]
 
-                # kmsi = keep me signed in
-                resp=requests.post("https://login.microsoftonline.com/kmsi", data=data, allow_redirects=False)
-        except ValueError:
-            pass
+            mfa_option_list=config["arrUserProofs"]
+
+            options=[method["authMethodId"] for method in mfa_option_list ]
+
+            option_list=list(map(str, range(len(options))))
+
+            mfa_option_dict=dict(zip(option_list, options))
+
+            text="Which MFA method would you like to pick?\n"
+            for number, option in mfa_option_dict.items():
+                if option not in supported_mfa_methods:
+                    text += f"{number}: {option}(not supported)\n"
+                else:
+                    text += f"{number}: {option}\n"
+
+            text += "\n"
+
+            res=input(text)
+            while True:
+                if res not in option_list:
+                    print("Please pick a valid option...")
+                    res=input()
+                    continue
+                if mfa_option_dict[res] not in supported_mfa_methods:
+                    print("Please pick a supported MFA option...")
+                    res=input()
+                    continue
+                break
+
+
+            mfaMethod=mfa_option_dict[res]
+
+            # Start the authentication process.
+            # Spoof the Edge user agent. Endpoint throws "Bad Reputation" error if python requests user agent is used.
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0" 
+            }
+
+            data={  
+                "AuthMethodId":mfaMethod,
+                "Method": "BeginAuth",
+                "ctx": ctx,
+                "flowToken": flow
+            }
+
+            resp=requests.post("https://login.microsoftonline.com/common/SAS/BeginAuth", json=data, headers=headers, allow_redirects=False)
+
+            results=resp.json()
+            if not results["Success"]:
+                print(f"error while beginning mfa process. error: {results['Message']}. Exiting...")
+                exit()
+
+
+            # Based on the Auth method, complete MFA
+            match mfaMethod:
+                case "PhoneAppNotification":
+                    MFAChallenge=results["Entropy"]
+                    print(f"Please respond to the prompt on the authenticator app with the following number: {MFAChallenge}")
+
+                    while True:
+                        flow=results["FlowToken"]
+                        ctx=results["Ctx"]
+                        sessionId=results["SessionId"]
+
+                        query={
+                            "authMethodId":mfaMethod
+                        }
+
+                        headers={
+                            "X-Ms-Ctx": ctx,
+                            "X-Ms-Flowtoken": flow,
+                            "X-Ms-Sessionid": sessionId,
+                            "Canary": canary
+                        }
+
+                        resp=requests.get( "https://login.microsoftonline.com/common/SAS/EndAuth", headers=headers, params=query, allow_redirects=False )
+
+                        results=resp.json()
+                        if results["Success"]:
+                            break
+                        sleep(3)
+
+                case "PhoneAppOTP":
+
+                    poll_count=0
+
+                    while True:
+                        poll_count+=1
+                        flow=results["FlowToken"]
+                        ctx=results["Ctx"]
+                        sessionId=results["SessionId"]
+                        otp=input("Please enter an OTP from your phone authenticator app: ")
+                        headers={
+                            "Canary": canary
+                        }
+
+                        data={
+                            "Method": "EndAuth",
+                            "Ctx": ctx,
+                            "FlowToken": flow,
+                            "AuthMethodId": mfaMethod,
+                            "AdditionalAuthData": otp,
+                            "pollCount": poll_count,
+                            "SessionId": sessionId
+                        }
+
+                        resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
+
+                        results=resp.json()
+                        if results["Success"]:
+                            break
+                        else:
+                            print(f"Error: {results['Message']}")
+
+                case "OneWaySMS":
+
+                    poll_count=0
+
+                    while True:
+                        poll_count+=1
+                        flow=results["FlowToken"]
+                        ctx=results["Ctx"]
+                        sessionId=results["SessionId"]
+
+                        otp=input("Please enter the code from the SMS: ")
+
+                        headers={
+                            "Canary": canary
+                        }
+
+                        data={
+                            "Method": "EndAuth",
+                            "Ctx": ctx,
+                            "FlowToken": flow,
+                            "AuthMethodId": mfaMethod,
+                            "AdditionalAuthData": otp,
+                            "pollCount": poll_count,
+                            "SessionId": sessionId
+                        }
+
+                        resp=requests.post( "https://login.microsoftonline.com/common/SAS/EndAuth", json=data, headers=headers, allow_redirects=False )
+
+                        results=resp.json()
+                        if results["Success"]:
+                            break
+                        else:
+                            print(f"Error: {results['Message']}")
+                case _:
+                    print( f"MFA Type {mfaMethod} not supported by azol. exiting")
+                    exit()
+
+            flow=results["FlowToken"]
+            ctx=results["Ctx"]
+            sessionId=results["SessionId"]
+
+            data={
+                "request": ctx,
+                "login": self.credential_object.get_username(),
+                "flowToken": flow,
+                "mfaAuthMethod": mfaMethod,
+                "type":22
+            }
+
+            resp=requests.post( "https://login.microsoftonline.com/common/SAS/ProcessAuth", data=data, allow_redirects=False)
+
+            #look for kmsi interrupt. If no interrupt, eat exception and continue
+            try:
+                config_text=string_between(resp.text, "$Config=", ";\n//]]>")
+
+                config=json.loads(config_text)
+                flow=config["sFT"]
+                canary=config["apiCanary"]
+                ctx=config["sCtx"]
+                pgid=config["pgid"]
+
+                # If Keep Me Signed In(KMSI) interrupt, send "yes"
+                if pgid=="KmsiInterrupt":
+                    data={
+                        "ctx": ctx,
+                        "flowToken": flow,
+                        "LoginOptions": 1
+                    }
+
+                    # kmsi = keep me signed in
+                    resp=requests.post("https://login.microsoftonline.com/kmsi", data=data, allow_redirects=False)
+            except ValueError:
+                pass
 
         secrets={}
 
