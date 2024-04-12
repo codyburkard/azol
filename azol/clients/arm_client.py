@@ -872,6 +872,16 @@ class ArmClient( OAuthHTTPClient ):
         deployments = response.json()
         return deployments
 
+    def get_current_user_pim_eligibility(self, scope):
+        response = self._send_request( f"{scope}/providers/Microsoft.Authorization/roleEligibilityScheduleInstances",
+                                       query_parameters={ "api-version": "2020-10-01",
+                                                         "$filter": "asTarget()"},
+                                       method="GET" )
+
+
+        roles = response.json()
+        return roles
+    
     def get_descendants( self, management_group ):
         """Get direct descendants of a management group.
 
@@ -967,7 +977,7 @@ class ArmClient( OAuthHTTPClient ):
                                               json=data )
         return arm_raw_response.json()
 
-    def get( self, path, api_version ):
+    def get( self, path, api_version=None ):
         """Send a GET request to ARM, and return the raw results
 
         Calls ARM at the path specified, and returns the raw deserialized results.
@@ -983,11 +993,34 @@ class ArmClient( OAuthHTTPClient ):
             ArmRequestFailedException: An error occurred accessing the ARM API
 
         """
+        if api_version is None:
+            logging.info("Attempting to resolve api version...")
+
+            if "/providers" not in path:
+                namespace="microsoft.resources"
+                provider=path.split("/")[1]
+            else:    
+                namespace_and_provider=path.split('/providers/')[-1]
+                namespace_and_provider_list=namespace_and_provider.split("/")
+                namespace = namespace_and_provider_list[0].lower()
+
+                if len(namespace_and_provider_list) == 2:
+                    provider = namespace_and_provider_list[1].lower()
+                else:
+                    provider = "/".join(namespace_and_provider_list[1:-2]).lower()
+                print(provider)
+            logging.info("Resolved namespace to ", namespace)
+            logging.info("Resolved provider to ", provider)
+
+            provider_versions=self.providers[namespace][provider]
+            latest=provider_versions[0]
+            logging.info("Resolved latest provider version to ", latest)
+            api_version = latest
+        print(path, api_version)
         arm_raw_response = self._send_request( path,
-                                              query_parameters={ "api-version": api_version} )
+            query_parameters={ "api-version": api_version} )
         return arm_raw_response.json()
 
-    
     def delete( self, path ):
         """Make a DELETE request to a specific API path within the ARM API.
 

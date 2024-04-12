@@ -61,7 +61,8 @@ class AzolCache:
                 return token_data
 
     def cache_or_update(self, access_token, tenant_id, client_id, default_scope, scopes,
-                        oauth_resource, refresh_token=None, username=None):
+                        oauth_resource, refresh_token=None, username=None, 
+                        ests_cookie=None, ests_persistent_cookie=None):
         """
             Saves an access and refresh token to the cache, or updates an existing entry
 
@@ -74,7 +75,8 @@ class AzolCache:
                 - oauth_resource: string - the OAuth resource issued in the token.
                 - refresh_token: string - refresh token to cache
                 - username: string - optional. The username that should be issued in the token
-
+                - ests_cookie: string - optional. ests cookie to cache
+                
             Returns:
                 Null
         """
@@ -136,7 +138,9 @@ class AzolCache:
                 "scopes":scopes,
                 "username":username,
                 "access_token": access_token,
-                "refresh_token": refresh_token
+                "refresh_token": refresh_token,
+                "ests_cookie": ests_cookie,
+                "ests_persistent_cookie": ests_persistent_cookie
             }
         self.tokens[ tenant_id ][ oauth_resource ][ client_id ].append(new_token)
         
