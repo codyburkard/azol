@@ -12,11 +12,11 @@ class User( EntraIdCredential ):
 
     supportedOAuthFlows = [ "refresh_token", "device_code", "authorization_code" ]
     credentialType="user"
-    default_oauth_flow="authorization_code"
+    default_oauth_flow="device_code"
 
     def __init__( self, username=None, refresh_token=None,
-                  client_id=FOCIClients.AzurePortal,
-                  redirect_uri=known_client_redirect_uris[FOCIClients.AzurePortal], 
+                  client_id=FOCIClients.MicrosoftAzurePowershell,
+                  redirect_uri=None, 
                   *args, **kwargs ):
         """
             User objects always have a username, pasword and refresh token. 

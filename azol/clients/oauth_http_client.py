@@ -11,20 +11,21 @@ class OAuthHTTPClient:
         Base class for OAuth HTTP client objects.
     """
 
-    def __init__( self, tenant, oauth_resource, base_url,
-                  cred, azol_id=None, oauth_flow=None, secrets_provider=None,
+    def __init__( self, cred, oauth_resource, base_url,
+                  tenant=None, azol_id=None, oauth_flow=None, secrets_provider=None,
                   use_persistent_cache=True, auto_refresh=True):
+        if tenant is None:
+            if cred.credentialType != "user":
+                raise Exception("tenant must be specified if credential is not of type 'user'")
+            if not cred.default_oauth_flow=="refresh_token":
+                username=cred.get_username()
+                tenant=username.split("@")[1]
         self.scopes=[]
         self.default_scope=True
         self.profile_scope=True
         self.openid_scope=True
         self.offline_access_scope=True
         self._baseurl = base_url
-        # get the tenant Id if its a domain name. If it cant be parsed as a guid, its a domain name.
-        try:
-            uuid.UUID(tenant, version=4)
-        except ValueError:
-            tenant=get_tenant_id(tenant)
 
         self._tenant = tenant
         self._resource = oauth_resource
@@ -171,6 +172,9 @@ class OAuthHTTPClient:
 
         return self._current_token
 
+    def get_client_id( self ):
+        return self.token_service.get_client_id()
+
     def switch_client(self, client_id):
         """
             Switch the oauth client used by the HTTP Client. Used to abuse FOCI functionality.
@@ -186,6 +190,29 @@ class OAuthHTTPClient:
         self._current_token = None
         self.token_service.switch_client(client_id)
 
+    @classmethod
+    def from_client(cls, client, *args, **kwargs):
+        """
+            Generate a new HTTP Client with a different OAuth Resource, using the current client class.
+
+            Use this class to switch from, for example, a GraphClient to an ArmClient.
+            Nullifies current cached access token, but leaves refresh token in client.
+
+            Note: alternative to "refresh_to_new_resource" of an active client, but results in the same.
+
+            Vars:
+                - client - OAuthHTTP child class that will be used to instantiate the 
+                              new class. Note that this must be a valid
+                              OAuth HTTP child class. For example, ArmClient, GraphClient,
+                              or KeyVaultClient
+
+            Returns:
+                OAuthHTTPClient subclass instance
+        """
+        rt = client.get_current_refresh_token()
+        user = User(refresh_token=rt, client_id=client.get_client_id())
+        newClass = cls(*args, tenant=client._tenant, cred=user, **kwargs)
+        return newClass
 
     def refresh_to_new_resource(self, oauth_http_client_class):
         """
