@@ -5,9 +5,9 @@ import requests
 from azol.utils import string_between
 from azol.models.sp_login_init_model import SPLoginModel
 
-def start_azure_portal_login():
+def start_azure_portal_login(*args):
     # get a nonce cookie from portal, and have the portal initiate a login flow
-    resp=requests.get("https://portal.azure.com/signin/idpRedirect.js/?sessionId=cb357678cb1c4365a9a8fa8a0de9718a&feature.argsubscriptions=true&feature.showservicehealthalerts=true&feature.prefetchtokens=true&feature.internalgraphapiversion=true&feature.selftoken=true&feature.globalresourcefilter=true&feature.msaljs=true&feature.fetchpolicyforrestypes=true&feature.testcrosscloudpuid=true&feature.useredirecthint=true&feature.usetenanthint=true&idpc=0&savedDefaultDirectory=f01eea3a-026a-4680-be79-da5fe4842a3d")
+    resp=requests.get("https://portal.azure.com/signin/idpRedirect.js/?feature.argsubscriptions=true&feature.showservicehealthalerts=true&feature.prefetchtokens=true&feature.internalgraphapiversion=true&feature.selftoken=true&feature.globalresourcefilter=true&feature.msaljs=true&feature.fetchpolicyforrestypes=true&feature.testcrosscloudpuid=true&feature.useredirecthint=true&feature.usetenanthint=true&idpc=0")
 
     # Save Portal cookies for later - required when finishing login flow
     portalCookies=resp.cookies

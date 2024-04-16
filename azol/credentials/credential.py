@@ -41,14 +41,6 @@ class Credential:
         """
         return self._client_id
 
-    def set_client_id( self, client_id ):
-        """
-            Set the current client id set in the credential.
-    
-            Returns: None
-        """
-        self._client_id=client_id
-
     def get_username( self ):
         """
             Get the username of the user object
