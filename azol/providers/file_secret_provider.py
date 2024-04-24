@@ -9,21 +9,13 @@ class FileSecretProvider( object ):
         A local file secret provider for the azol token service
     """
 
-    def __init__( self, azol_id=None ):
+    def __init__( self, file=None, directory=AZOLSECRETPROVIDERFOLDER ):
 
-        if azol_id is None:
-            azol_id = uuid.uuid4()
-        self._id = azol_id
-        self.file_path=AZOLSECRETPROVIDERFOLDER + "/" + self._id
-        Path(AZOLSECRETPROVIDERFOLDER).mkdir(parents=True, exist_ok=True)
-
-    def get_id( self ):
-        """
-            Get the azol id of the file secret provider
-
-            Returns string - azol id
-        """
-        return self._id
+        if file is None:
+            file = uuid.uuid4()
+        self.file = file
+        self.file_path=directory + "/" + self.file
+        Path(directory).mkdir(parents=True, exist_ok=True)
 
     def get_secret( self, secret_reference ):
         """

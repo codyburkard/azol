@@ -62,7 +62,45 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_active_pim_sessions( self ):
+    def get_current_pim_eligibility( self ):
+        """Get pim eligibility of the current principal.
+
+        Returns:
+            A list of dictionaries containing the pim eligibility of the current principal.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response = self._send_request( "/roleManagement/directory/roleEligibilitySchedules/"
+                                       "filterByCurrentUser(on='principal')?"
+                                       "$expand=principal,roleDefinition($select=displayName,id,templateId)"
+                                       "&$select=principal,roleDefinition,scheduleInfo,memberType,appScopeId,"
+                                       "directoryScopeId,createdDateTime" )
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_current_pim_activations( self ):
+        """Get pim activations of the current principal.
+
+        Returns:
+            A list of dictionaries containing the pim activations of the current principal.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response = self._send_request( "/roleManagement/directory/roleAssignmentSchedules/"
+                                       "filterByCurrentUser(on='principal')?"
+                                       "$expand=principal,roleDefinition($select=displayName,id,templateId)"
+                                       "&$select=principal,roleDefinition,scheduleInfo,memberType,appScopeId,"
+                                       "directoryScopeId,createdDateTime" )
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_active_pim_assignments( self ):
         """Get all active PIM sessions.
         
         Returns:
@@ -73,24 +111,27 @@ class GraphClient( OAuthHTTPClient ):
 
         """
         response = self._send_request( "/roleManagement/directory/roleAssignmentSchedules?"
-                                      "$select=roleDefinitionId,principalId,"
-                                      "directoryScopeId,scheduleInfo,scheduleInfo" )
+                                       "$expand=principal,roleDefinition($select=displayName,id,templateId)"
+                                       "&$select=principal,roleDefinition,scheduleInfo,memberType,appScopeId,"
+                                       "directoryScopeId,createdDateTime" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-
-    def get_eligible_pim_sessions( self ):
-        """Get all eligible PIM sessions.
+    def get_eligible_pim_assignments( self ):
+        """Get all eligible PIM assignments.
         
         Returns:
-            A list of dictionaries containing the eligible PIM sessions in the directory.
+            A list of dictionaries containing the eligible PIM assignments in the directory.
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
 
         """
-        response = self._send_request( "/roleManagement/directory/roleEligibilitySchedules" )
+        response = self._send_request( "/roleManagement/directory/roleEligibilitySchedules?"
+                                       "$expand=principal,roleDefinition($select=displayName,id,templateId)"
+                                       "&$select=principal,roleDefinition,scheduleInfo,memberType,appScopeId,"
+                                       "directoryScopeId,createdDateTime" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -113,47 +154,54 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_users( self, abbreviate=True ):
+    def get_all_users( self, select=[] ):
         """Get all users in the directory.
 
+        Args:
+            select - (list) - a list of json attributes that should be returned from all group.
+                    if this is None, the select query parameter will not be used in the request
         Returns:
             A list of objects containing object id and displayName of all users
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-
-        if abbreviate:
-            url_with_filter = "/users?$select=id,displayName"
+        if select == []:
+            path_and_params="/users?$select=id,displayName"
+        elif select == None:
+            path_and_params="/users"
         else:
-            url_with_filter = "/users"
-
-        response = self._send_request( url_with_filter )
+            path_and_params="/users?$select="+",".join(select)
+        response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_service_principals( self, abbreviate=True ):
+    def get_all_service_principals( self, select=[] ):
         """Get all service principals in the directory.
 
+        Args:
+            select - (list) - a list of json attributes that should be returned from all group.
+                    if this is None, the select query parameter will not be used in the request
         Returns:
             A list of objects containing object id and displayName of all service principals
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        
-        if abbreviate:
-            url_with_filter = "/servicePrincipals?$select=id,displayName"
+        if select == []:
+            path_and_params="/servicePrincipals?$select=id,displayName"
+        elif select == None:
+            path_and_params="/servicePrincipals"
         else:
-            url_with_filter = "/servicePrincipals"
+            path_and_params="/servicePrincipals?$select="+",".join(select)
         
-        response = self._send_request( url_with_filter )
+        response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_applications( self ):
+    def get_all_applications( self, select=[] ):
         """Get all application objects in the directory.
 
         Returns:
@@ -162,12 +210,18 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( "/applications?$select=id,displayName" )
+        if select == []:
+            path_and_params="/applications?$select=id,displayName"
+        elif select == None:
+            path_and_params="/applications"
+        else:
+            path_and_params="/applications?$select="+",".join(select)
+        response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_directory_role_assignments( self ):
+    def get_directory_role_assignments( self, object=None ):
         """Get directory role assignments.
 
         Get all Entra ID role assignments in the directory, ignoring assignments through PIM
@@ -178,7 +232,10 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( "/roleManagement/directory/roleAssignments" )
+        if object is None:
+            response = self._send_request( "/roleManagement/directory/roleAssignments" )
+        else:
+            response = self._send_request( f"/roleManagement/directory/roleAssignments?$count=true&$filter=principalId eq '{object}'" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -221,7 +278,7 @@ class GraphClient( OAuthHTTPClient ):
             "directoryScopeId": "/"
         }
         response = self._send_request( "/roleManagement/directory/roleAssignments",
-                                       method="POST", json=body )
+                                       method="POST", success_code=201, json=body )
         if response:
             return response.json()
         raise GraphRequestFailedException()
@@ -324,10 +381,14 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_groups( self ):
+    def get_all_groups( self, select=[] ):
         """Get all group ids and displaynames in Entra Id.
 
         Calls the graph API get get all groups, and nested memberships.
+
+        Args:
+            select - (list) - a list of json attributes that should be returned from all group.
+                    if this is None, the select query parameter will not be used in the request
 
         Returns:
             A list of dictionaries, containing group ids and names
@@ -335,7 +396,13 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( "/groups?$select=id,displayName" )
+        if select == []:
+            path_and_params="/groups?$select=id,displayName"
+        elif select == None:
+            path_and_params="/groups"
+        else:
+            path_and_params="/groups?$select="+",".join(select)
+        response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
