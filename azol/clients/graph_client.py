@@ -1,7 +1,7 @@
 """A module containing a client for interacting with the Graph API"""
 import logging
 from azol.clients.oauth_http_client import OAuthHTTPClient
-from azol.constants import GRAPHBETAURL, OAuthResourceIDs
+from azol.constants import GRAPHBETAURL, OAuthResourceIDs, roleNameMap, appPermissionNameMap
 
 class GraphRequestFailedException(Exception):
     """
@@ -58,6 +58,126 @@ class GraphClient( OAuthHTTPClient ):
         """
         response = self._send_request( "/roleManagement/directory/roleDefinitions?"
                                        "$select=displayName,id,isBuiltIn" )
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_access_catalogs_roles( self, catalogId ):
+        """
+            Get all the roles assigned to a specific access catalog
+
+            Args:
+                catalogId - the ID of the catalog
+
+            Returns:
+                A list of dictionaries containing role assignments for the catalog
+
+            Raises:
+                GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( f"/roleManagement/entitlementManagement/roleAssignments?$filter=appScopeId eq '/AccessPackageCatalog/{catalogId}'" )
+
+        if response:
+            roles=response.json()["value"]
+            for role in roles:
+                role["azolAnnotations"] = {
+                    "roleName" : roleNameMap[role["roleDefinitionId"]]
+                }
+            return roles
+        raise GraphRequestFailedException()
+
+
+    def create_package_policy( self, policy ):
+        """Create policy for Entitlement Management Pacakge
+
+        Returns:
+            A dictionary containing the entitlement management package policy.
+
+        Args:
+            catalog - dictionary containing entitlement management package policy
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageAssignmentPolicies",
+                                     method="POST", json=policy, success_code=201 )
+
+        if response:
+            return response.json()
+        raise GraphRequestFailedException()
+
+    def create_entitlement_management_package( self, package ):
+        """Create Entitlement Management Pacakge
+
+        Returns:
+            A dictionary containing the entitlement management package.
+
+        Args:
+            catalog - dictionary containing entitlement management package metadata
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages",
+                                     method="POST", json=package, success_code=201 )
+
+        if response:
+            return response.json()
+        raise GraphRequestFailedException()
+
+    def create_entitlement_management_catalog( self, catalog ):
+        """Create Entitlement Management Catalog
+
+        Returns:
+            A list of dictionaries containing all entitlement management catalog.
+
+        Args:
+            catalog - dictionary containing entitlement management catalog metadata
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs",
+                                     method="POST", json=catalog, success_code=201 )
+
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_access_packages( self ):
+        """Get Entitlement Management Access Packages.
+
+        Returns:
+            A list of dictionaries containing all entitlement management access packages metadata.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages?$expand=accessPackageCatalog($select=displayName,id,description)" )
+
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_entitlement_management_catalogs( self ):
+        """Get Entitlement Management Catalogs.
+
+        Returns:
+            A list of dictionaries containing entitlement management catalog metadata.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs" )
+
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -233,9 +353,9 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         if object is None:
-            response = self._send_request( "/roleManagement/directory/roleAssignments" )
+            response = self._send_request( "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId" )
         else:
-            response = self._send_request( f"/roleManagement/directory/roleAssignments?$count=true&$filter=principalId eq '{object}'" )
+            response = self._send_request( f"/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId&$count=true&$filter=principalId eq '{object}'" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -437,7 +557,14 @@ class GraphClient( OAuthHTTPClient ):
                                        "$select=resourceId,resourceDisplayName,principalType,"
                                        "appRoleId)&$select=appRoleAssignments,id,displayName" )
         if response:
-            return self._get_all_graph_objects(response)
+            sps = self._get_all_graph_objects(response)
+            for sp in sps:
+                for ass in sp["appRoleAssignments"]:
+                    from pprint import pprint
+                    ass["azolannotations"] = {
+                        "permissionName": appPermissionNameMap[ass["appRoleId"]]
+                    }
+            return sps
         raise GraphRequestFailedException()
 
     #def get_all_sp_delegated_permissions( self ): # TODO: currently errors
@@ -501,7 +628,12 @@ class GraphClient( OAuthHTTPClient ):
         """
         response = self._send_request( f"/servicePrincipals/{sp_object_id}/appRoleAssignments" )
         if response:
-            return self._get_all_graph_objects(response)
+            api_permissions=self._get_all_graph_objects(response)
+            for permission in api_permissions:
+                permission["azolAnnotations"] = {
+                        "permissionName": appPermissionNameMap[permission["appRoleId"]]
+                }
+            return api_permissions
         raise GraphRequestFailedException()
 
     def get_delegated_permissions( self, sp_object_id ):
