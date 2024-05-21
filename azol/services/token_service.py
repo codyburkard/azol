@@ -46,6 +46,13 @@ class TokenService( object ):
         self.offline_access_scope=offline_access_scope
         self.ests_cookie=None
         self.ests_persistent_cookie=None
+        if self.credential_object.has_ests():
+            cookies=self.credential_object.get_ests()
+            self.ests_cookie=cookies.ests
+            self.ests_persistent_cookie=cookies.ests_persistent
+        else:
+            self.ests_cookie=None
+            self.ests_persistent_cookie=None
         if self.credential_object.has_refresh_token():
             self._refresh_token=self.credential_object.get_refresh_token()
         else:
@@ -375,12 +382,8 @@ class TokenService( object ):
             "grant_type": "refresh_token"
         }
 
-        headers={
-            "origin": "http://localhost"
-        }
-
         response = requests.post( "https://login.microsoftonline.com/"
-                                 f"{self._tenant}/oauth2/v2.0/token", data=body, headers=headers, timeout=10 )
+                                 f"{self._tenant}/oauth2/v2.0/token", data=body,  timeout=10 )
         if "error" in response.json().keys():
             error_msg = response.content
             msg_dict = json.loads(error_msg)
@@ -397,7 +400,6 @@ class TokenService( object ):
                     self._refresh_token=new_token_data["refresh_token"]
                     return new_token_data
             else:
-                print(response.request.body)
                 logging.error( "Error: error while refreshing token. "
                             "Raw Error Message from Identity Platform: %s", error_msg )
                 
