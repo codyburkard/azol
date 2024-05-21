@@ -13,14 +13,14 @@ class OAuthHTTPClient:
 
     def __init__( self, cred, oauth_resource, base_url,
                   tenant=None, azol_id=None, oauth_flow=None, secrets_provider=None,
-                  use_persistent_cache=True, auto_refresh=True):
+                  use_persistent_cache=True, auto_refresh=True, scopes=[]):
         if tenant is None:
             if cred.credentialType != "user":
                 raise Exception("tenant must be specified if credential is not of type 'user'")
             if not cred.default_oauth_flow=="refresh_token":
                 username=cred.get_username()
                 tenant=username.split("@")[1]
-        self.scopes=[]
+        self.scopes=scopes
         self.default_scope=True
         self.profile_scope=True
         self.openid_scope=True
