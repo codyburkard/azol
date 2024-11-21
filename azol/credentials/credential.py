@@ -41,6 +41,16 @@ class Credential:
         """
         return self._client_id
 
+    def has_ests(self):
+        """
+            Determine if the credential was initialized with an ESTS cookie. Return False by default.
+
+            Overridden in User Class
+
+            Returns: bool
+        """
+        return False
+
     def get_username( self ):
         """
             Get the username of the user object
