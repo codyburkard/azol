@@ -51,6 +51,16 @@ class Credential:
             return self._username
         return None
 
+    def has_ests( self ):
+        """
+            Check if the credential object has an ESTS cookie that has been set.
+
+            Defaults to return False. Overridden in User class.
+
+            Returns: bool
+        """
+        return False
+
     def get_id( self ):
         """
             Get the azol id of the object.
