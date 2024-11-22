@@ -4,7 +4,8 @@ from azol.constants import ( AZOL_HOME, PROVIDER_CACHE_DIR, PROVIDER_CACHE,
                              RBACRoleDefinitionIds, OAuthResourceIDs, OAUTHFLOWS,
                              FOCIClients )
 
-from azol.clients import KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient
+from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient,
+                           DataFactoryClient )
 from azol.credentials import User, ApplicationObject, ServicePrincipal, AccessToken
 from azol.utils import parse_jwt, get_tenant_id, is_token_expired
 from azol.providers import KeyVaultProvider, FileSecretProvider
@@ -23,6 +24,7 @@ __all__ = [
     "FOCIClients",
     "GraphClient",
     "OAuthHTTPClient",
+    "DataFactoryClient",
     "ArmClient",
     "KeyVaultClient",
     "AccessToken",
