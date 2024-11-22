@@ -63,6 +63,8 @@ class TokenService( object ):
         else:
             self.flow_type="application"
 
+        self._client_id=self.credential_object.get_client_id()
+
         self.registered_token_flows={}
         self._register_flow( OAUTHFLOWS.CLIENT_CREDENTIALS, self._get_client_credential_token )
         self._register_flow( OAUTHFLOWS.REFRESH_TOKEN , self._refresh_token_flow )
@@ -82,7 +84,7 @@ class TokenService( object ):
              or OAUTHFLOWS.REFRESH_TOKEN in self.credential_object.supportedOAuthFlows
               or OAUTHFLOWS.AUTHORIZATION_CODE in self.credential_object.supportedOAuthFlows ):
             get_cached_token_result = self.token_cache.try_get_token(self._tenant,
-                                                            self.credential_object.get_client_id(),
+                                                            self._client_id,
                                                             self.default_scope, self.scopes,
                                                             self.oauth_resource,
                                                             self.credential_object._username )
@@ -108,7 +110,7 @@ class TokenService( object ):
         self.openid_scope=openid
 
     def switch_client( self, client_id ):
-        self.credential_object.set_client_id(client_id)
+        self._client_id=client_id
 
     def refresh_token( self ):
         if self.credential_object.credentialType != "user":
@@ -122,7 +124,7 @@ class TokenService( object ):
         self._refresh_token=refresh_token
 
         self.token_cache.cache_or_update( access_token, self._tenant,
-                                         self.credential_object.get_client_id(),
+                                         self._client_id,
                                          self.default_scope, self.scopes, self.oauth_resource,
                                          refresh_token=refresh_token,
                                          username=self.credential_object.get_username() )
@@ -169,7 +171,7 @@ class TokenService( object ):
             Returns: string of ascii encoded token, or None if no token found in cache
         """
         token_data=self.token_cache.try_get_token( self._tenant,
-                                                  self.credential_object.get_client_id(),
+                                                  self._client_id,
                                                   self.default_scope, self.scopes,
                                                   self.oauth_resource,
                                                   self.credential_object.get_username() )
@@ -208,7 +210,7 @@ class TokenService( object ):
         if self.offline_access_scope and self.credential_object.credentialType=="user":
             refresh_token = token_data_object["refresh_token"]
             self.token_cache.cache_or_update( access_token, self._tenant,
-                                            self.credential_object.get_client_id(),
+                                            self._client_id,
                                             self.default_scope, self.scopes, self.oauth_resource,
                                             refresh_token=refresh_token,
                                             username=self.credential_object.get_username(),
@@ -216,7 +218,7 @@ class TokenService( object ):
                                             ests_persistent_cookie=ests_persistent_cookie )
         else:
             self.token_cache.cache_or_update( access_token, self._tenant,
-                                            self.credential_object.get_client_id(),
+                                            self._client_id,
                                             self.default_scope, self.scopes, self.oauth_resource,
                                             ests_cookie=ests_cookie,
                                             ests_persistent_cookie=ests_persistent_cookie )
@@ -230,7 +232,7 @@ class TokenService( object ):
             Returns: string of ascii encoded token, or None if no token found in cache
         """
         token_data=self.token_cache.try_get_token( self._tenant,
-                                                self.credential_object.get_client_id(),
+                                                self._client_id,
                                                 self.default_scope, self.scopes,
                                                 self.oauth_resource,
                                                 self.credential_object.get_username() )
@@ -242,7 +244,7 @@ class TokenService( object ):
         return token
 
     def get_client_id(self):
-        return self.credential_object.get_client_id()
+        return self._client_id
 
     def _raw_token( self ):
         """
@@ -318,7 +320,7 @@ class TokenService( object ):
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
         body = {
-            "client_id": self.credential_object.get_client_id(),
+            "client_id": self._client_id,
             "client_secret": client_secret,
             "scope": extended_scope_string,
             "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
@@ -332,7 +334,7 @@ class TokenService( object ):
             logging.error( "Client credential grant failed for client id "
                           "%s at scope %s."
                           " Raw Identity Platform error message:\r\n%s", 
-                          self.credential_object.get_client_id(), extended_scope_string,
+                          self._client_id, extended_scope_string,
                           error_msg )
             return
         response_body = response.json()
@@ -354,7 +356,7 @@ class TokenService( object ):
                           "type refresh_token.", self.credential_object )
             raise Exception( "Unsupported OAuth Flow" )
 
-        client_id=self.credential_object.get_client_id()
+        client_id=self._client_id
 
         openid_scope = "openid"
         profile_scope = "profile"
@@ -393,7 +395,7 @@ class TokenService( object ):
                 # This requires an ESTSAUTH or ESTSPERSISTENTAUTH cookie
                 if self.ests_cookie!=None:
                     # Use the ests cookie to start MFA again
-                    new_token_data=ests_login_flow(self._tenant, self.credential_object.get_client_id(),
+                    new_token_data=ests_login_flow(self._tenant, self._client_id,
                                                    self.ests_cookie, self.ests_persistent_cookie, 
                                                    self.credential_object.get_username(),
                                                    extended_scope_string, self.credential_object._redirect_uri)
@@ -441,7 +443,7 @@ class TokenService( object ):
                           "type authorization_code.", self.credential_object )
             raise Exception( "Credential does not support OAuth Flow" )
         
-        client_id=self.credential_object.get_client_id()
+        client_id=self._client_id
 
         redirect_url=self.credential_object._redirect_uri
 
@@ -466,7 +468,7 @@ class TokenService( object ):
             Returns: dictionary containing token data
         """
 
-        client_id = self.credential_object.get_client_id()
+        client_id = self._client_id
         if OAUTHFLOWS.DEVICE_CODE not in self.credential_object.supportedOAuthFlows:
             logging.error( "credential type of %s does not support "
                           "OAuth flow of type device_code.", self.credential_object.__name__ )
