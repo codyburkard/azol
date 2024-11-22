@@ -17,12 +17,12 @@ from azol.credentials import User
 from azol.clients import ArmClient
 
 cred = User(username="user@domain.com")
-armClient = ArmClient(tenant="tenant.com", cred=cred)
+arm_client = ArmClient(tenant="tenant.com", cred=cred)
 
-subscriptions=armClient.get_subscriptions()
+subscriptions=arm_client.get_subscriptions()
 
-for sid in subscriptions:
-  print(sid)
+for sub_id in subscriptions:
+  print(sub_id)
 ```
 
 Log in as a Service Principal and get all groups, with owners
@@ -34,11 +34,26 @@ from azol.clients import GraphClient
 
 cred = ServicePrincipal(client_id="00000000-0000-0000-0000-000000000000", client_secret="your secret" )
 
-GraphClient = GraphClient(tenant="tenant.com", cred=cred)
+graph_client = GraphClient(tenant="tenant.com", cred=cred)
 
-groups=GraphClient.get_all_groups_and_owners()
+groups=graph_client.get_all_groups_and_owners()
 
 for group in groups:
   pprint(group)
+
+```
+
+Log in as a user to their default tenant, but use an interactive signin. Get all tenants the user belongs to.
+
+```
+from azol import *
+
+cred=User("user@domain.com")
+arm_client=ArmClient(cred=cred, oauth_flow="authorization_code")
+
+tenants=arm_client.get_tenants()
+
+for tenant in tenants:
+  print(tenant["defaultDomain"])
 
 ```
