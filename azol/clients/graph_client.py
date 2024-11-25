@@ -3,6 +3,7 @@ import logging
 from azol.clients.oauth_http_client import OAuthHTTPClient
 from azol.constants import GRAPHBETAURL, OAuthResourceIDs, roleNameMap, appPermissionNameMap
 import asyncio
+import string
 
 class GraphRequestFailedException(Exception):
     """
@@ -275,28 +276,66 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_users( self, select=[] ):
+    def _get_all_users( self, select=[], filter=None ):
         """Get all users in the directory.
 
         Args:
             select - (list) - a list of json attributes that should be returned from all group.
                     if this is None, the select query parameter will not be used in the request
+
+            filter - (str) - a raw list containing a filter expression for the graph request
+
         Returns:
             A list of objects containing object id and displayName of all users
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/users?$select=id,displayName"
-        elif select == None:
-            path_and_params="/users"
+        if filter is None:
+            filter_param_string=""
         else:
-            path_and_params="/users?$select="+",".join(select)
+            filter_param_string=filter
+        if select == []:
+            if filter is not None:
+                path_and_params="/users?$select=id,displayName" + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users?$select=id,displayName"
+        elif select == None:
+            if filter is not None:
+                path_and_params="/users" + f"?&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users"
+        else:
+            if filter is not None:
+                path_and_params="/users?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users?$select="+",".join(select)
         response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
+
+    def get_all_users(self, select=[], filter=None, fast=False):
+        if fast:
+            results=asyncio.run(self._get_all_users_async())
+        else:
+            results=self._get_all_users( select=[], filter=None)
+        return results
+
+
+    async def _get_all_users_async(self):
+        loop = asyncio.get_event_loop()
+        numbers=list(string.digits)
+        letters=list(string.ascii_lowercase)
+        special=[ "-", ".", "_", "!", "^", "~" ]
+        buckets=numbers+letters+special
+        threads=[]
+        for bucket in buckets:
+            task=loop.run_in_executor(None, self._get_all_users, None, f"startsWith(userPrincipalName, '{bucket}')")
+            threads.append(task)
+        res_list=await asyncio.gather(*threads)
+        res = sum(res_list, [])
+        return res
 
     async def _get_all_service_principals_async(self):
         loop = asyncio.get_event_loop()
@@ -344,8 +383,10 @@ class GraphClient( OAuthHTTPClient ):
             else:
                 path_and_params="/servicePrincipals?$select=id,displayName"
         else:
-            path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
-        
+            if filter is not None:
+                path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select="+",".join(select)
         
         headers={}
         if filter is not None:
