@@ -3,7 +3,23 @@ import logging
 import json
 import base64
 import time
+import uuid
 import requests
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import pkcs12, Encoding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.x509.oid import NameOID
+from datetime import datetime, timedelta
+from dataclasses import dataclass
+
+@dataclass()
+class AzolX509:
+    """
+        A data class containing an X509 cert in PEM format, both with and without a private key
+    """
+    public_cert: str
+    private_cert: str
 
 def string_between(whole_string, start_string, end_string, include_start=False):
     i=whole_string.index(start_string)
@@ -76,3 +92,62 @@ def is_token_expired( token, padding_time=0 ):
     if current_time >= expiry-padding_time:
         return True
     return False
+
+def create_x509_cert(common_name, password=None, country_name=None, state=None, locality=None,
+                     org_name=None, private_key_size=2048, subject_alternative_name=None,
+                     cert_name="azol_cert", private_key_public_exponent=65537,
+                     cert_valid_days=365):
+
+    private_key = rsa.generate_private_key(
+        public_exponent=private_key_public_exponent,
+        key_size=2048,
+    )
+
+    name_attributes=[]
+
+    if country_name: name_attributes.append(x509.NameAttribute(NameOID.COUNTRY_NAME, country_name))
+    if state: name_attributes.append(x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, state))
+    if locality: name_attributes.append(x509.NameAttribute(NameOID.LOCALITY_NAME, locality))
+    if org_name: name_attributes.append(x509.NameAttribute(NameOID.ORGANIZATION_NAME, org_name))
+    if common_name: name_attributes.append(x509.NameAttribute(NameOID.COMMON_NAME, common_name))
+
+    subject = x509.Name(name_attributes)
+
+    certificate = x509.CertificateBuilder().subject_name(
+        subject
+    ).issuer_name(x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
+    ).public_key(
+        private_key.public_key()
+    ).serial_number(
+        x509.random_serial_number()
+    ).not_valid_before(
+        datetime.utcnow()
+    ).not_valid_after(
+        # Certificate valid for 1 year
+        datetime.utcnow() + timedelta(days=cert_valid_days)
+    )
+    if subject_alternative_name: certificate.add_extension(
+        x509.SubjectAlternativeName([x509.DNSName(subject_alternative_name.encode())]),
+        critical=False,
+    )
+
+    signed_cert=certificate.sign(private_key, hashes.SHA256())
+
+    if not password:
+        encryption_alg=serialization.NoEncryption()
+    else:
+        encryption_alg=serialization.BestAvailableEncryption(password)
+
+    pfx = pkcs12.serialize_key_and_certificates(
+        name=cert_name.encode(),
+        key=private_key,
+        cert=signed_cert,
+        cas=None,
+        encryption_algorithm=encryption_alg
+    )
+    res=AzolX509(
+        public_cert=signed_cert.public_bytes(Encoding.PEM),
+        private_cert=base64.b64encode(pfx)
+    )
+    return res
