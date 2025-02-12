@@ -2,6 +2,7 @@
 import logging
 from azol.clients.oauth_http_client import OAuthHTTPClient
 from azol.constants import GRAPHBETAURL, OAuthResourceIDs, roleNameMap, appPermissionNameMap
+import asyncio
 
 class GraphRequestFailedException(Exception):
     """
@@ -95,7 +96,7 @@ class GraphClient( OAuthHTTPClient ):
             A dictionary containing the entitlement management package policy.
 
         Args:
-            catalog - dictionary containing entitlement management package policy
+            policy - dictionary containing entitlement management package policy
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -115,7 +116,7 @@ class GraphClient( OAuthHTTPClient ):
             A dictionary containing the entitlement management package.
 
         Args:
-            catalog - dictionary containing entitlement management package metadata
+            package - dictionary containing entitlement management package metadata
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -132,7 +133,7 @@ class GraphClient( OAuthHTTPClient ):
         """Create Entitlement Management Catalog
 
         Returns:
-            A list of dictionaries containing all entitlement management catalog.
+            A list of dictionaries containing the entitlement management catalog.
 
         Args:
             catalog - dictionary containing entitlement management catalog metadata
@@ -391,7 +392,27 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_service_principals( self, select=[] ):
+    async def _get_all_service_principals_async(self):
+        loop = asyncio.get_event_loop()
+        threads=[]
+        buckets=["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6","7","8","9"]
+        for bucket in buckets:
+            print(bucket)
+            task=loop.run_in_executor(None, self._get_all_service_principals, None, f"startsWith(appId,'{bucket}')")
+            threads.append(task)
+        res_list=await asyncio.gather(*threads)
+        res = sum(res_list, [])
+        return res
+
+    def get_all_service_principals( self, select=[], filter=None, fast=False ):
+        if fast:
+            results=asyncio.run(self._get_all_service_principals_async())
+        else:
+            results=self._get_all_service_principals( select=[], filter=None)
+        return results
+
+
+    def _get_all_service_principals( self, select=[], filter=None ):
         """Get all service principals in the directory.
 
         Args:
@@ -403,14 +424,31 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/servicePrincipals?$select=id,displayName"
-        elif select == None:
-            path_and_params="/servicePrincipals"
+        if filter is None:
+            filter_param_string=""
         else:
-            path_and_params="/servicePrincipals?$select="+",".join(select)
+            filter_param_string=filter
+        if select == []:
+            if filter is not None:
+                path_and_params="/servicePrincipals?$select=id,displayName" + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select=id,displayName"
+            print(path_and_params)
+        elif select == None:
+            if filter is not None:
+                path_and_params=f"/servicePrincipals?$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select=id,displayName"
+            print(path_and_params)
+        else:
+            path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
         
-        response = self._send_request( path_and_params )
+        
+        headers={}
+        if filter is not None:
+            headers={"ConsistencyLevel": "Eventual"}
+
+        response = self._send_request( path_and_params, headers=headers )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -1014,7 +1052,7 @@ class GraphClient( OAuthHTTPClient ):
 
         return output
 
-    def get( self, path ):
+    def get( self, path, headers={} ):
         """Make a get request to a specific API path within the Graph API.
 
         Args:
@@ -1026,7 +1064,7 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( path )
+        response = self._send_request( path, headers=headers )
         if response:
             return response.json()
         raise GraphRequestFailedException()

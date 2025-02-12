@@ -245,7 +245,7 @@ class OAuthHTTPClient:
         self._current_token = token
 
     def _send_request( self, path=None, query_parameters=None, data=None, method="GET",
-                       json=None, url=None ):
+                       json=None, url=None, headers=None ):
         """
             Internal method. Send request
         """
@@ -271,7 +271,10 @@ class OAuthHTTPClient:
             self.fetch_token()
 
         access_token = self.get_current_token()
-        headers = {'Authorization': f"Bearer {access_token}" }
+        if headers is None:
+            headers = {'Authorization': f"Bearer {access_token}" }
+        else:
+            headers['Authorization'] = f"Bearer {access_token}" 
         resp = requests.request( method, request_url, data=data, params=query_parameters,
                                  headers=headers, json=json, timeout=10)
 
