@@ -183,100 +183,6 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def create_package_policy( self, policy ):
-        """Create policy for Entitlement Management Pacakge
-
-        Returns:
-            A dictionary containing the entitlement management package policy.
-
-        Args:
-            catalog - dictionary containing entitlement management package policy
-
-        Raises:
-            GraphRequestFailedException: An error occurred accessing the Graph API
-
-        """
-        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageAssignmentPolicies",
-                                     method="POST", json=policy, success_code=201 )
-
-        if response:
-            return response.json()
-        raise GraphRequestFailedException()
-
-    def create_entitlement_management_package( self, package ):
-        """Create Entitlement Management Pacakge
-
-        Returns:
-            A dictionary containing the entitlement management package.
-
-        Args:
-            catalog - dictionary containing entitlement management package metadata
-
-        Raises:
-            GraphRequestFailedException: An error occurred accessing the Graph API
-
-        """
-        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages",
-                                     method="POST", json=package, success_code=201 )
-
-        if response:
-            return response.json()
-        raise GraphRequestFailedException()
-
-    def create_entitlement_management_catalog( self, catalog ):
-        """Create Entitlement Management Catalog
-
-        Returns:
-            A list of dictionaries containing all entitlement management catalog.
-
-        Args:
-            catalog - dictionary containing entitlement management catalog metadata
-
-        Raises:
-            GraphRequestFailedException: An error occurred accessing the Graph API
-
-        """
-        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs",
-                                     method="POST", json=catalog, success_code=201 )
-
-        if response:
-            return self._get_all_graph_objects(response)
-        raise GraphRequestFailedException()
-
-    def get_access_packages( self ):
-        """Get Entitlement Management Access Packages.
-
-        Returns:
-            A list of dictionaries containing all entitlement management access packages metadata.
-
-        Raises:
-            GraphRequestFailedException: An error occurred accessing the Graph API
-
-        """
-
-        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages?$expand=accessPackageCatalog($select=displayName,id,description)" )
-
-        if response:
-            return self._get_all_graph_objects(response)
-        raise GraphRequestFailedException()
-
-    def get_entitlement_management_catalogs( self ):
-        """Get Entitlement Management Catalogs.
-
-        Returns:
-            A list of dictionaries containing entitlement management catalog metadata.
-
-        Raises:
-            GraphRequestFailedException: An error occurred accessing the Graph API
-
-        """
-
-        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs" )
-
-        if response:
-            return self._get_all_graph_objects(response)
-        raise GraphRequestFailedException()
-
     def get_current_pim_eligibility( self ):
         """Get pim eligibility of the current principal.
 
@@ -397,7 +303,6 @@ class GraphClient( OAuthHTTPClient ):
         threads=[]
         buckets=["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6","7","8","9"]
         for bucket in buckets:
-            print(bucket)
             task=loop.run_in_executor(None, self._get_all_service_principals, None, f"startsWith(appId,'{bucket}')")
             threads.append(task)
         res_list=await asyncio.gather(*threads)
@@ -433,13 +338,11 @@ class GraphClient( OAuthHTTPClient ):
                 path_and_params="/servicePrincipals?$select=id,displayName" + f"&$count=true&$filter={filter_param_string}"
             else:
                 path_and_params="/servicePrincipals?$select=id,displayName"
-            print(path_and_params)
         elif select == None:
             if filter is not None:
                 path_and_params=f"/servicePrincipals?$count=true&$filter={filter_param_string}"
             else:
                 path_and_params="/servicePrincipals?$select=id,displayName"
-            print(path_and_params)
         else:
             path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
         
