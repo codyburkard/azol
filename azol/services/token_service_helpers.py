@@ -34,7 +34,7 @@ def build_scope_string(oauth_resource, scopes=[], default_scope=None, openid_sco
         extended_scope_string=scope_string+extension
     return extended_scope_string
 
-def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windows_Chrome):
+def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windows_Edge):
 
     resp=requests.get(f"https://portal.azure.com:443/signin/index/@{tenant}?feature.argsubscriptions=true&feature.showservicehealthalerts=true&feature.prefetchtokens=true&feature.internalgraphapiversion=true&feature.selftoken=true&feature.globalresourcefilter=true&feature.msaljs=true&feature.fetchpolicyforrestypes=true&feature.testcrosscloudpuid=true&feature.useredirecthint=true&feature.usetenanthint=true&idpc=0")
 
@@ -186,7 +186,8 @@ def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windo
                 otp=input("Please enter the code from the SMS: ")
 
                 headers={
-                    "Canary": canary
+                    "Canary": canary,
+                    "User-Agent": useragent
                 }
 
                 data={
@@ -222,7 +223,7 @@ def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windo
         "type":22
     }
 
-    resp=requests.post( f"https://login.microsoftonline.com/common/SAS/ProcessAuth", data=data, allow_redirects=False)
+    resp=requests.post( f"https://login.microsoftonline.com/common/SAS/ProcessAuth", data=data, allow_redirects=False, headers={"User-Agent": useragent})
 
     #look for kmsi interrupt. If no interrupt, eat exception and continue
     try:
@@ -244,7 +245,7 @@ def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windo
             }
 
             # kmsi = keep me signed in
-            resp=requests.post("https://login.microsoftonline.com/kmsi", data=data, allow_redirects=False)
+            resp=requests.post("https://login.microsoftonline.com/kmsi", data=data, allow_redirects=False, headers={"User-Agent": useragent})
 
     except ValueError:
         pass

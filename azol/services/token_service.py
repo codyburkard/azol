@@ -40,7 +40,7 @@ class TokenService( object ):
                   secrets_provider, use_persistent_cache, oauth_resource,
                   scopes, default_scope, profile_scope, openid_scope,
                   offline_access_scope, azol_id=None, 
-                  useragent=UserAgents.Windows_Chrome):
+                  useragent=UserAgents.Windows_Edge):
         self.credential_object=cred
         self._tenant=tenant_id
         self._useragent=useragent
@@ -579,7 +579,6 @@ class TokenService( object ):
         response = requests.post( "https://login.microsoftonline.com/"
                                  f"{self._tenant}/oauth2/v2.0/devicecode",
                                  data=body, timeout=10, headers={"User-Agent": self._useragent} )
-        print(response.request.body, response.request.path_url)
         if response.status_code != 200:
             logging.error("Error while getting a device code: %s", response.content)
             raise IdentityPlatformRequestFailedException()
