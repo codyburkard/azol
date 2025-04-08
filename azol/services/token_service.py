@@ -325,10 +325,10 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
         
@@ -447,10 +447,10 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
 
@@ -566,10 +566,10 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
         body = {
@@ -579,6 +579,7 @@ class TokenService( object ):
         response = requests.post( "https://login.microsoftonline.com/"
                                  f"{self._tenant}/oauth2/v2.0/devicecode",
                                  data=body, timeout=10, headers={"User-Agent": self._useragent} )
+        print(response.request.body, response.request.path_url)
         if response.status_code != 200:
             logging.error("Error while getting a device code: %s", response.content)
             raise IdentityPlatformRequestFailedException()
@@ -618,13 +619,6 @@ class TokenService( object ):
 
             # check if the user logged in with the user that they specified
             _, body, _ = parse_jwt(token)
-            username=body["unique_name"].lower()
-
-            # We need to know the username at startup so that we can check for cached tokens
-            if username != self.credential_object.get_username():
-                logging.error("Please log in with the same user specified in the User() object." )
-                raise Exception("username of credential object does not "
-                                "match username of logged-in user")
 
             self._refresh_token=refresh_token
 
