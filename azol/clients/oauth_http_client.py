@@ -282,5 +282,32 @@ class OAuthHTTPClient:
             headers["User-Agent"] = self._useragent
         resp = requests.request( method, request_url, data=data, params=query_parameters,
                                  headers=headers, json=json, timeout=10)
-
         return resp
+    
+    def get( self, path, headers=None, query_parameters=None ):
+        """Make a get request .
+
+        Args:
+            - path - (string) The graph API path.
+            - headers - (dict) A Dictionary of the headers to be sent in the request
+
+        Returns:
+           Request.Response object from the GET request
+
+        """
+        response = self._send_request(  path, headers=headers, query_parameters=query_parameters, method="GET" )
+        return response
+
+    def post( self, path, headers=None, json=None, query_parameters=None ):
+        """Make a get request .
+
+        Args:
+            - path - (string) The graph API path.
+            - headers - (dict) A Dictionary of the headers to be sent in the request
+
+        Returns:
+           Request.Response object from the GET request
+
+        """
+        response = self._send_request(  path, headers=headers, query_parameters=query_parameters, json=json, method="POST" )
+        return response
