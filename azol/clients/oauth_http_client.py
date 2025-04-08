@@ -5,15 +5,17 @@ import requests
 from azol.utils import is_token_expired, get_tenant_id, parse_jwt
 from azol.services.token_service import TokenService as tService
 from azol.credentials import User
+from azol.constants import UserAgents
 
 class OAuthHTTPClient:
     """
         Base class for OAuth HTTP client objects.
     """
 
-    def __init__( self, cred, oauth_resource, base_url,
+    def __init__( self, cred, oauth_resource, base_url=None,
                   tenant=None, azol_id=None, oauth_flow=None, secrets_provider=None,
-                  use_persistent_cache=True, auto_refresh=True, scopes=[]):
+                  use_persistent_cache=True, auto_refresh=True, scopes=[],
+                  useragent=UserAgents.Windows_Chrome):
         if tenant is None:
             if cred.credentialType != "user":
                 raise Exception("tenant must be specified if credential is not of type 'user'")
@@ -21,6 +23,7 @@ class OAuthHTTPClient:
                 username=cred.get_username()
                 tenant=username.split("@")[1]
         self.scopes=scopes
+        self._useragent=useragent
         self.default_scope=True
         self.profile_scope=True
         self.openid_scope=True
@@ -42,7 +45,8 @@ class OAuthHTTPClient:
                                     default_scope=self.default_scope,
                                     profile_scope=self.profile_scope,
                                     openid_scope=self.openid_scope,
-                                    offline_access_scope=self.offline_access_scope )
+                                    offline_access_scope=self.offline_access_scope,
+                                    useragent=useragent )
 
         self._current_token = self.token_service.get_cached_token_if_not_expired()
 
@@ -272,9 +276,10 @@ class OAuthHTTPClient:
 
         access_token = self.get_current_token()
         if headers is None:
-            headers = {'Authorization': f"Bearer {access_token}" }
+            headers = {'Authorization': f"Bearer {access_token}", "User-Agent": self._useragent }
         else:
             headers['Authorization'] = f"Bearer {access_token}" 
+            headers["User-Agent"] = self._useragent
         resp = requests.request( method, request_url, data=data, params=query_parameters,
                                  headers=headers, json=json, timeout=10)
 

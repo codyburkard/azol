@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 from azol.constants import IDENTITYPLATFORMURL, DEFAULTSCOPE
 from azol.utils import is_token_expired, parse_jwt, string_between
 from azol.caches import LocalTokenCache, InMemoryTokenCache
-from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris
+from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris, UserAgents
 from copy import deepcopy
 from cryptography import x509
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding
@@ -39,9 +39,11 @@ class TokenService( object ):
     def __init__( self, cred, tenant_id, oauth_flow,
                   secrets_provider, use_persistent_cache, oauth_resource,
                   scopes, default_scope, profile_scope, openid_scope,
-                  offline_access_scope, azol_id=None):
+                  offline_access_scope, azol_id=None, 
+                  useragent=UserAgents.Windows_Chrome):
         self.credential_object=cred
         self._tenant=tenant_id
+        self._useragent=useragent
         self.oauth_flow=oauth_flow
         self.secrets_provider=secrets_provider
         self.oauth_resource=oauth_resource
@@ -401,7 +403,7 @@ class TokenService( object ):
                 "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
             }
 
-        response = requests.post( url, data=body, timeout=10 )
+        response = requests.post( url, data=body, timeout=10, headers={"User-Agent": self._useragent} )
         response_status = response.status_code
         logging.info( "response status for client credential grant: %s", str(response_status) )
         if response_status != 200:
@@ -464,7 +466,7 @@ class TokenService( object ):
         }
 
         response = requests.post( "https://login.microsoftonline.com/"
-                                 f"{self._tenant}/oauth2/v2.0/token", data=body,  timeout=10 )
+                                 f"{self._tenant}/oauth2/v2.0/token", data=body,  timeout=10, headers={"User-Agent": self._useragent} )
         if "error" in response.json().keys():
             error_msg = response.content
             msg_dict = json.loads(error_msg)
@@ -576,7 +578,7 @@ class TokenService( object ):
         }
         response = requests.post( "https://login.microsoftonline.com/"
                                  f"{self._tenant}/oauth2/v2.0/devicecode",
-                                 data=body, timeout=10 )
+                                 data=body, timeout=10, headers={"User-Agent": self._useragent} )
         if response.status_code != 200:
             logging.error("Error while getting a device code: %s", response.content)
             raise IdentityPlatformRequestFailedException()
@@ -596,7 +598,7 @@ class TokenService( object ):
             }
             response = requests.post( "https://login.microsoftonline.com/"
                                      f"{self._tenant}/oauth2/v2.0/token",
-                                     data=body, timeout=10 )
+                                     data=body, timeout=10, headers={"User-Agent": self._useragent} )
             if response.status_code != 200:
 
                 if response.json()[ "error" ] != "authorization_pending":

@@ -17,6 +17,7 @@ class ServicePrincipal( EntraIdCredential ):
         super().__init__( *args, **kwargs)
         if not client_secret and not pfx_path and not b64_cert:
             raise Exception("No secret added for the service principal.")
+        cert=None
         if client_secret is not None:
             self._credential_type="secret"
         elif b64_cert is not None:

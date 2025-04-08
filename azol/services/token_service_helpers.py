@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from azol.constants import IDENTITYPLATFORMURL, DEFAULTSCOPE
 from azol.utils import is_token_expired, parse_jwt, string_between
 from azol.caches import LocalTokenCache, InMemoryTokenCache
-from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris
+from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris, UserAgents
 from copy import deepcopy
 from azol.utils.auth_utils import start_azure_portal_login, end_azure_portal_login
 
@@ -34,7 +34,7 @@ def build_scope_string(oauth_resource, scopes=[], default_scope=None, openid_sco
         extended_scope_string=scope_string+extension
     return extended_scope_string
 
-def ests_portal_login_flow(tenant, username, cookies):
+def ests_portal_login_flow(tenant, username, cookies, useragent=UserAgents.Windows_Chrome):
 
     resp=requests.get(f"https://portal.azure.com:443/signin/index/@{tenant}?feature.argsubscriptions=true&feature.showservicehealthalerts=true&feature.prefetchtokens=true&feature.internalgraphapiversion=true&feature.selftoken=true&feature.globalresourcefilter=true&feature.msaljs=true&feature.fetchpolicyforrestypes=true&feature.testcrosscloudpuid=true&feature.useredirecthint=true&feature.usetenanthint=true&idpc=0")
 
@@ -93,7 +93,7 @@ def ests_portal_login_flow(tenant, username, cookies):
     # Spoof the Edge user agent. Endpoint throws "Bad Reputation" error if python requests user agent is used.
     headers={
         "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0" 
+        "User-Agent": useragent 
     }
 
     data={  
@@ -129,7 +129,8 @@ def ests_portal_login_flow(tenant, username, cookies):
                     "X-Ms-Ctx": ctx,
                     "X-Ms-Flowtoken": flow,
                     "X-Ms-Sessionid": sessionId,
-                    "Canary": canary
+                    "Canary": canary,
+                    "User-Agent": useragent
                 }
 
                 resp=requests.get( f"https://login.microsoftonline.com/common/SAS/EndAuth", headers=headers, params=query, allow_redirects=False )
@@ -150,7 +151,8 @@ def ests_portal_login_flow(tenant, username, cookies):
                 sessionId=results["SessionId"]
                 otp=input("Please enter an OTP from your phone authenticator app: ")
                 headers={
-                    "Canary": canary
+                    "Canary": canary,
+                    "User-Agent": useragent
                 }
 
                 data={
