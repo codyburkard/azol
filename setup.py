@@ -18,6 +18,7 @@ setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "requests==2.31.0",
-        "dataclasses==0.6"
+        "dataclasses==0.6",
+        "cryptography"
     ]
 )

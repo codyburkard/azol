@@ -2,6 +2,8 @@
 import logging
 from azol.clients.oauth_http_client import OAuthHTTPClient
 from azol.constants import GRAPHBETAURL, OAuthResourceIDs, roleNameMap, appPermissionNameMap
+import asyncio
+import string
 
 class GraphRequestFailedException(Exception):
     """
@@ -95,7 +97,8 @@ class GraphClient( OAuthHTTPClient ):
             A dictionary containing the entitlement management package policy.
 
         Args:
-            catalog - dictionary containing entitlement management package policy
+            policy - dictionary containing entitlement management package policy
+<<<<<<< HEAD
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -115,7 +118,7 @@ class GraphClient( OAuthHTTPClient ):
             A dictionary containing the entitlement management package.
 
         Args:
-            catalog - dictionary containing entitlement management package metadata
+            package - dictionary containing entitlement management package metadata
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -132,7 +135,103 @@ class GraphClient( OAuthHTTPClient ):
         """Create Entitlement Management Catalog
 
         Returns:
-            A list of dictionaries containing all entitlement management catalog.
+            A list of dictionaries containing the entitlement management catalog.
+
+        Args:
+            catalog - dictionary containing entitlement management catalog metadata
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs",
+                                     method="POST", json=catalog, success_code=201 )
+
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_access_packages( self ):
+        """Get Entitlement Management Access Packages.
+
+        Returns:
+            A list of dictionaries containing all entitlement management access packages metadata.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages?$expand=accessPackageCatalog($select=displayName,id,description)" )
+
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_entitlement_management_catalogs( self ):
+        """Get Entitlement Management Catalogs.
+
+        Returns:
+            A list of dictionaries containing entitlement management catalog metadata.
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageCatalogs" )
+
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def create_package_policy( self, policy ):
+        """Create policy for Entitlement Management Pacakge
+
+        Returns:
+            A dictionary containing the entitlement management package policy.
+
+        Args:
+            catalog - dictionary containing entitlement management package policy
+=======
+>>>>>>> fcd84e7 (async support for getting service principals)
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackageAssignmentPolicies",
+                                     method="POST", json=policy, success_code=201 )
+
+        if response:
+            return response.json()
+        raise GraphRequestFailedException()
+
+    def create_entitlement_management_package( self, package ):
+        """Create Entitlement Management Pacakge
+
+        Returns:
+            A dictionary containing the entitlement management package.
+
+        Args:
+            package - dictionary containing entitlement management package metadata
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+
+        """
+        response=self._send_request( "/identityGovernance/entitlementManagement/accessPackages",
+                                     method="POST", json=package, success_code=201 )
+
+        if response:
+            return response.json()
+        raise GraphRequestFailedException()
+
+    def create_entitlement_management_catalog( self, catalog ):
+        """Create Entitlement Management Catalog
+
+        Returns:
+            A list of dictionaries containing the entitlement management catalog.
 
         Args:
             catalog - dictionary containing entitlement management catalog metadata
@@ -274,30 +373,87 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_users( self, select=[] ):
+    def _get_all_users( self, select=[], filter=None ):
         """Get all users in the directory.
 
         Args:
             select - (list) - a list of json attributes that should be returned from all group.
                     if this is None, the select query parameter will not be used in the request
+
+            filter - (str) - a raw list containing a filter expression for the graph request
+
         Returns:
             A list of objects containing object id and displayName of all users
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/users?$select=id,displayName"
-        elif select == None:
-            path_and_params="/users"
+        if filter is None:
+            filter_param_string=""
         else:
-            path_and_params="/users?$select="+",".join(select)
+            filter_param_string=filter
+        if select == []:
+            if filter is not None:
+                path_and_params="/users?$select=id,displayName,appId" + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users?$select=id,displayName,appId"
+        elif select == None:
+            if filter is not None:
+                path_and_params="/users" + f"?&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users"
+        else:
+            if filter is not None:
+                path_and_params="/users?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/users?$select="+",".join(select)
         response = self._send_request( path_and_params )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_service_principals( self, select=[] ):
+    def get_all_users(self, select=[], filter=None, fast=False):
+        if fast:
+            results=asyncio.run(self._get_all_users_async())
+        else:
+            results=self._get_all_users( select=[], filter=None)
+        return results
+
+
+    async def _get_all_users_async(self):
+        loop = asyncio.get_event_loop()
+        numbers=list(string.digits)
+        letters=list(string.ascii_lowercase)
+        special=[ "-", ".", "_", "!", "^", "~" ]
+        buckets=numbers+letters+special
+        threads=[]
+        for bucket in buckets:
+            task=loop.run_in_executor(None, self._get_all_users, None, f"startsWith(userPrincipalName, '{bucket}')")
+            threads.append(task)
+        res_list=await asyncio.gather(*threads)
+        res = sum(res_list, [])
+        return res
+
+    async def _get_all_service_principals_async(self):
+        loop = asyncio.get_event_loop()
+        threads=[]
+        buckets=["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6","7","8","9"]
+        for bucket in buckets:
+            task=loop.run_in_executor(None, self._get_all_service_principals, None, f"startsWith(appId,'{bucket}')")
+            threads.append(task)
+        res_list=await asyncio.gather(*threads)
+        res = sum(res_list, [])
+        return res
+
+    def get_all_service_principals( self, select=[], filter=None, fast=False ):
+        if fast:
+            results=asyncio.run(self._get_all_service_principals_async())
+        else:
+            results=self._get_all_service_principals( select=[], filter=None)
+        return results
+
+
+    def _get_all_service_principals( self, select=[], filter=None ):
         """Get all service principals in the directory.
 
         Args:
@@ -309,14 +465,31 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/servicePrincipals?$select=id,displayName"
-        elif select == None:
-            path_and_params="/servicePrincipals"
+        if filter is None:
+            filter_param_string=""
         else:
-            path_and_params="/servicePrincipals?$select="+",".join(select)
+            filter_param_string=filter
+        if select == []:
+            if filter is not None:
+                path_and_params="/servicePrincipals?$select=id,displayName,appId" + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select=id,displayName,appId"
+        elif select == None:
+            if filter is not None:
+                path_and_params=f"/servicePrincipals?$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select=id,displayName,appId"
+        else:
+            if filter is not None:
+                path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
+            else:
+                path_and_params="/servicePrincipals?$select="+",".join(select)
         
-        response = self._send_request( path_and_params )
+        headers={}
+        if filter is not None:
+            headers={"ConsistencyLevel": "Eventual"}
+
+        response = self._send_request( path_and_params, headers=headers )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -331,7 +504,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         if select == []:
-            path_and_params="/applications?$select=id,displayName"
+            path_and_params="/applications?$select=id,displayName,appId"
         elif select == None:
             path_and_params="/applications"
         else:
@@ -353,9 +526,9 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         if object is None:
-            response = self._send_request( "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId" )
+            response = self._send_request( "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,directoryScopeId,principalOrganizationId" )
         else:
-            response = self._send_request( f"/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId&$count=true&$filter=principalId eq '{object}'" )
+            response = self._send_request( f"/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,directoryScopeId,principalOrganizationId&$count=true&$filter=principalId eq '{object}'" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -460,7 +633,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         response = self._send_request( "/servicePrincipals?$expand=owners($select=id,displayName)&"
-                                       "$select=owners,id,displayName" )
+                                       "$select=owners,id,appId,displayName" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -479,7 +652,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         response = self._send_request( "/applications?$expand=owners($select=id,displayName)&"
-                                       "$select=owners,id,displayName" )
+                                       "$select=owners,id,appId,displayName" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -560,7 +733,6 @@ class GraphClient( OAuthHTTPClient ):
             sps = self._get_all_graph_objects(response)
             for sp in sps:
                 for ass in sp["appRoleAssignments"]:
-                    from pprint import pprint
                     ass["azolannotations"] = {
                         "permissionName": appPermissionNameMap[ass["appRoleId"]]
                     }
@@ -920,7 +1092,7 @@ class GraphClient( OAuthHTTPClient ):
 
         return output
 
-    def get( self, path ):
+    def get( self, path, headers={} ):
         """Make a get request to a specific API path within the Graph API.
 
         Args:
@@ -932,7 +1104,7 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( path )
+        response = self._send_request( path, headers=headers )
         if response:
             return response.json()
         raise GraphRequestFailedException()

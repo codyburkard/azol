@@ -8,13 +8,20 @@ import json
 from time import sleep
 import requests
 import getpass
+import base64
 import urllib.parse
 from html.parser import HTMLParser
 from azol.constants import IDENTITYPLATFORMURL, DEFAULTSCOPE
 from azol.utils import is_token_expired, parse_jwt, string_between
 from azol.caches import LocalTokenCache, InMemoryTokenCache
-from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris
+from azol.constants import OAUTHFLOWS, FOCIClients, known_client_redirect_uris, UserAgents
 from copy import deepcopy
+from cryptography import x509
+from cryptography.hazmat.primitives.serialization import pkcs12, Encoding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.x509.oid import NameOID
+from datetime import datetime, timedelta
 
 from .token_service_helpers import build_scope_string, auth_code_flow, ests_login_flow
 
@@ -32,10 +39,11 @@ class TokenService( object ):
     def __init__( self, cred, tenant_id, oauth_flow,
                   secrets_provider, use_persistent_cache, oauth_resource,
                   scopes, default_scope, profile_scope, openid_scope,
-                  offline_access_scope, azol_id=None):
-
-        self.credential_object=deepcopy(cred)
+                  offline_access_scope, azol_id=None, 
+                  useragent=UserAgents.Windows_Edge):
+        self.credential_object=cred
         self._tenant=tenant_id
+        self._useragent=useragent
         self.oauth_flow=oauth_flow
         self.secrets_provider=secrets_provider
         self.oauth_resource=oauth_resource
@@ -70,7 +78,7 @@ class TokenService( object ):
         self._register_flow( OAUTHFLOWS.REFRESH_TOKEN , self._refresh_token_flow )
         self._register_flow( OAUTHFLOWS.DEVICE_CODE, self._device_code )
         self._register_flow( OAUTHFLOWS.RAW_TOKEN, self._raw_token )
-        self._register_flow( OAUTHFLOWS.AUTHORIZATION_CODE, self._authorization_code)
+        self._register_flow( OAUTHFLOWS.AUTHORIZATION_CODE, self._authorization_code )
         if azol_id is None:
             azol_id = uuid.uuid4()
         self._id = azol_id
@@ -138,7 +146,6 @@ class TokenService( object ):
         """
         if self.credential_object.credentialType != "user":
             raise Exception("Cannot use a refresh token for a non user credential type")
-
         if self._refresh_token is not None:
             return self._refresh_token
         return None
@@ -184,7 +191,26 @@ class TokenService( object ):
             return None
         return token
 
-    def fetch_token( self ):
+    def _sign_token( self, validity, client_id ):
+        now=int(datetime.now().timestamp()-100)
+        later=int(datetime.now().timestamp()+validity)
+
+        header={
+            "alg": "RS256",
+            "typ": "JWT",
+            "x5t": x5t,#'CDC6D70E0D295EDA890CC75E0721E0C5080D11F1'#x5t#"hOBcHZi846VCHSJbFAs26Go9VTQ"
+        }
+        body={
+            "aud": f"https://login.microsoftonline.com/{self._tenant}/oauth2/v2.0/token",
+            "exp": later,
+            "iss": client_id,
+            "jti": str(uuid.uuid4()),
+            "nbf": now,
+            "iat": now,
+            "sub": client_id
+        }
+
+    def fetch_token( self, validity=28800 ):
         """
             Initiates an authorization flow and caches a new token.
 
@@ -287,20 +313,6 @@ class TokenService( object ):
             raise Exception( "Unsupported OAuth Flow" )
 
         url = f"{IDENTITYPLATFORMURL}/{self._tenant}/oauth2/v2.0/token"
-
-        secret_from_credential = self.credential_object.get_client_secret()
-        if secret_from_credential.startswith("secret:"):
-            if self.secrets_provider:
-                client_secret = self.secrets_provider.get_secret(
-                       secret_from_credential.split("secret:")[1] )
-            else:
-                logging.error( "critical error: secret referenced used for servicePrincipal "
-                              "credential, but no secret provider configured. exiting..." )
-                raise Exception("secret refrerence used for sp credential, "
-                                "but there no secret provider")
-        else:
-            client_secret = secret_from_credential
-
         openid_scope = "openid"
         profile_scope = "profile"
         offline_access_scope = "offline_access"
@@ -313,20 +325,85 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
-        body = {
-            "client_id": self._client_id,
-            "client_secret": client_secret,
-            "scope": extended_scope_string,
-            "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
-        }
+        
+        credential_type=self.credential_object.get_credential_type()
+        now=int(datetime.now().timestamp()-100)
+        later=int(datetime.now().timestamp()+10000)
+        
+        if credential_type == "x509":
 
-        response = requests.post( url, data=body, timeout=10 )
+            cert_and_key=self.credential_object.get_certificate()
+            cert=cert_and_key.cert
+            key=cert_and_key.key
+            
+
+            der_binary=cert.certificate.public_bytes(Encoding.DER)
+            digest = hashes.Hash(hashes.SHA256())
+            digest.update(der_binary)
+            thumbprint_bytes=digest.finalize()
+            x5t=base64.urlsafe_b64encode(thumbprint_bytes).decode().rstrip('=')
+            header={
+                "alg": "RS256",
+                "typ": "JWT",
+                "x5t#S256": x5t,
+            }
+            assertion_body={
+                "aud": f"https://login.microsoftonline.com/{self._tenant}/oauth2/v2.0/token",
+                "exp": later,
+                "iss": self.credential_object.get_client_id(),
+                "jti": str(uuid.uuid4()),
+                "nbf": now,
+                "iat": now,
+                "sub": self.credential_object.get_client_id()
+            }
+
+            
+            b64_header=base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
+            b64_body=base64.urlsafe_b64encode(json.dumps(assertion_body).encode()).decode().rstrip('=')
+            header_body=b64_header + '.' + b64_body
+            signature=base64.urlsafe_b64encode(key.sign(header_body.encode(), padding=padding.PKCS1v15(), 
+                                               algorithm=hashes.SHA256())).decode().rstrip("=")
+            jwt=header_body + "." + signature
+
+            body={
+                "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                "client_assertion": jwt,
+                "client_id": self.credential_object.get_client_id(),
+                "scope": extended_scope_string,
+                "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
+            }
+
+        elif credential_type == "secret":
+        
+            secret_from_credential = self.credential_object.get_client_secret()
+            
+            if secret_from_credential.startswith("secret:"):
+                if self.secrets_provider:
+                    client_secret = self.secrets_provider.get_secret(
+                        secret_from_credential.split("secret:")[1] )
+                else:
+                    logging.error( "critical error: secret referenced used for servicePrincipal "
+                                "credential, but no secret provider configured. exiting..." )
+                    raise Exception("secret refrerence used for sp credential, "
+                                    "but there no secret provider")
+            else:
+                client_secret = secret_from_credential
+
+            
+            body = {
+                "client_id": self.credential_object.get_client_id(),
+                "client_secret": client_secret,
+                "scope": extended_scope_string,
+                "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
+            }
+
+        response = requests.post( url, data=body, timeout=10, headers={"User-Agent": self._useragent} )
         response_status = response.status_code
         logging.info( "response status for client credential grant: %s", str(response_status) )
         if response_status != 200:
@@ -370,10 +447,10 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
 
@@ -384,8 +461,12 @@ class TokenService( object ):
             "grant_type": "refresh_token"
         }
 
+        headers={
+            "origin": "http://localhost"
+        }
+
         response = requests.post( "https://login.microsoftonline.com/"
-                                 f"{self._tenant}/oauth2/v2.0/token", data=body,  timeout=10 )
+                                 f"{self._tenant}/oauth2/v2.0/token", data=body,  timeout=10, headers={"User-Agent": self._useragent} )
         if "error" in response.json().keys():
             error_msg = response.content
             msg_dict = json.loads(error_msg)
@@ -485,10 +566,10 @@ class TokenService( object ):
             extension+=f" {offline_access_scope}"
 
         if self.default_scope:
-            scope_string = f"{self.oauth_resource}{DEFAULTSCOPE}"
+            scope_string = f"{self.oauth_resource}/{DEFAULTSCOPE}"
             extended_scope_string=scope_string+extension
         else:
-            expanded_scopes = [ f"{self.oauth_resource}{s}" for s in self.scopes ]
+            expanded_scopes = [ f"{self.oauth_resource}/{s}" for s in self.scopes ]
             scope_string = " ".join(expanded_scopes)
             extended_scope_string=scope_string+extension
         body = {
@@ -497,7 +578,7 @@ class TokenService( object ):
         }
         response = requests.post( "https://login.microsoftonline.com/"
                                  f"{self._tenant}/oauth2/v2.0/devicecode",
-                                 data=body, timeout=10 )
+                                 data=body, timeout=10, headers={"User-Agent": self._useragent} )
         if response.status_code != 200:
             logging.error("Error while getting a device code: %s", response.content)
             raise IdentityPlatformRequestFailedException()
@@ -517,7 +598,7 @@ class TokenService( object ):
             }
             response = requests.post( "https://login.microsoftonline.com/"
                                      f"{self._tenant}/oauth2/v2.0/token",
-                                     data=body, timeout=10 )
+                                     data=body, timeout=10, headers={"User-Agent": self._useragent} )
             if response.status_code != 200:
 
                 if response.json()[ "error" ] != "authorization_pending":
@@ -537,13 +618,6 @@ class TokenService( object ):
 
             # check if the user logged in with the user that they specified
             _, body, _ = parse_jwt(token)
-            username=body["unique_name"].lower()
-
-            # We need to know the username at startup so that we can check for cached tokens
-            if username != self.credential_object.get_username():
-                logging.error("Please log in with the same user specified in the User() object." )
-                raise Exception("username of credential object does not "
-                                "match username of logged-in user")
 
             self._refresh_token=refresh_token
 
