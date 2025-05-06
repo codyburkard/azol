@@ -297,9 +297,9 @@ class GraphClient( OAuthHTTPClient ):
             filter_param_string=filter
         if select == []:
             if filter is not None:
-                path_and_params="/users?$select=id,displayName" + f"&$count=true&$filter={filter_param_string}"
+                path_and_params="/users?$select=id,displayName,appId" + f"&$count=true&$filter={filter_param_string}"
             else:
-                path_and_params="/users?$select=id,displayName"
+                path_and_params="/users?$select=id,displayName,appId"
         elif select == None:
             if filter is not None:
                 path_and_params="/users" + f"?&$count=true&$filter={filter_param_string}"
@@ -374,14 +374,14 @@ class GraphClient( OAuthHTTPClient ):
             filter_param_string=filter
         if select == []:
             if filter is not None:
-                path_and_params="/servicePrincipals?$select=id,displayName" + f"&$count=true&$filter={filter_param_string}"
+                path_and_params="/servicePrincipals?$select=id,displayName,appId" + f"&$count=true&$filter={filter_param_string}"
             else:
-                path_and_params="/servicePrincipals?$select=id,displayName"
+                path_and_params="/servicePrincipals?$select=id,displayName,appId"
         elif select == None:
             if filter is not None:
                 path_and_params=f"/servicePrincipals?$count=true&$filter={filter_param_string}"
             else:
-                path_and_params="/servicePrincipals?$select=id,displayName"
+                path_and_params="/servicePrincipals?$select=id,displayName,appId"
         else:
             if filter is not None:
                 path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
@@ -407,7 +407,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         if select == []:
-            path_and_params="/applications?$select=id,displayName"
+            path_and_params="/applications?$select=id,displayName,appId"
         elif select == None:
             path_and_params="/applications"
         else:
@@ -429,9 +429,9 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         if object is None:
-            response = self._send_request( "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId" )
+            response = self._send_request( "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,directoryScopeId,principalOrganizationId" )
         else:
-            response = self._send_request( f"/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,principalOrganizationId&$count=true&$filter=principalId eq '{object}'" )
+            response = self._send_request( f"/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName)&select=roleDefinition,roleDefinitionId,principalId,resourceScope,directoryScopeId,principalOrganizationId&$count=true&$filter=principalId eq '{object}'" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -536,7 +536,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         response = self._send_request( "/servicePrincipals?$expand=owners($select=id,displayName)&"
-                                       "$select=owners,id,displayName" )
+                                       "$select=owners,id,appId,displayName" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -555,7 +555,7 @@ class GraphClient( OAuthHTTPClient ):
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
         response = self._send_request( "/applications?$expand=owners($select=id,displayName)&"
-                                       "$select=owners,id,displayName" )
+                                       "$select=owners,id,appId,displayName" )
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
@@ -636,7 +636,6 @@ class GraphClient( OAuthHTTPClient ):
             sps = self._get_all_graph_objects(response)
             for sp in sps:
                 for ass in sp["appRoleAssignments"]:
-                    from pprint import pprint
                     ass["azolannotations"] = {
                         "permissionName": appPermissionNameMap[ass["appRoleId"]]
                     }
