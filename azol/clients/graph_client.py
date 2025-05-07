@@ -728,7 +728,7 @@ class GraphClient( OAuthHTTPClient ):
         """
         response = self._send_request( "/servicePrincipals?$expand=appRoleAssignments("
                                        "$select=resourceId,resourceDisplayName,principalType,"
-                                       "appRoleId)&$select=appRoleAssignments,id,displayName" )
+                                       "appRoleId)&$select=appRoleAssignments,id,appId,displayName" )
         if response:
             sps = self._get_all_graph_objects(response)
             for sp in sps:
