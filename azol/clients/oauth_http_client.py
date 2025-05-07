@@ -15,7 +15,7 @@ class OAuthHTTPClient:
     def __init__( self, cred, oauth_resource, base_url=None,
                   tenant=None, azol_id=None, oauth_flow=None, secrets_provider=None,
                   use_persistent_cache=True, auto_refresh=True, scopes=[],
-                  useragent=UserAgents.Windows_Chrome):
+                  useragent=UserAgents.Windows_Edge):
         if tenant is None:
             if cred.credentialType != "user":
                 raise Exception("tenant must be specified if credential is not of type 'user'")

@@ -380,7 +380,6 @@ class TokenService( object ):
             }
 
         elif credential_type == "secret":
-        
             secret_from_credential = self.credential_object.get_client_secret()
             
             if secret_from_credential.startswith("secret:"):
