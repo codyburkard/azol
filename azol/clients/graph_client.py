@@ -98,7 +98,6 @@ class GraphClient( OAuthHTTPClient ):
 
         Args:
             policy - dictionary containing entitlement management package policy
-<<<<<<< HEAD
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -193,8 +192,6 @@ class GraphClient( OAuthHTTPClient ):
 
         Args:
             catalog - dictionary containing entitlement management package policy
-=======
->>>>>>> fcd84e7 (async support for getting service principals)
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
@@ -754,7 +751,7 @@ class GraphClient( OAuthHTTPClient ):
     #        return self._get_all_graph_objects(response)
     #    raise GraphRequestFailedException()
 
-    def get_service_principal(self, sp_object_id):
+    def get_service_principal(self, object_id=None, client_id=None ):
         """Get service principals.
 
         Returns:
@@ -763,7 +760,10 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        response = self._send_request( f"/servicePrincipals/{sp_object_id}" )
+        if client_id is not None:
+            response = self._send_request( f"/servicePrincipals(appId='{client_id}')" )
+        else:
+            response = self._send_request( f"/servicePrincipals/{object_id}" )
         if response:
             return response.json()
         raise GraphRequestFailedException()
