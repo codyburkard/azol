@@ -25,11 +25,12 @@ class ArmClient( OAuthHTTPClient ):
         An HTTP client for interacting with the Azure Resource Manager API
     """
 
-    def __init__( self, *args, principal_lookup_table=None, **kwargs ):
+    def __init__( self, *args, principal_lookup_table=None, ignore_providers=False, **kwargs ):
         super().__init__( oauth_resource=OAuthResourceIDs.Arm, base_url=ARMURL, *args, **kwargs)
 
         # get all providers immediately when logging in
-        self.providers=self.get_providers()
+        if not ignore_providers:
+            self.providers=self.get_providers()
         self.principal_lookup_table=principal_lookup_table
 
     def get_tenants( self ):
