@@ -1041,6 +1041,84 @@ class ArmClient( OAuthHTTPClient ):
         app_service.properties["config"]["authSettingsV2"] = settings
         return app_service
 
+    def get_app_services_with_easy_auth(self):
+        """
+            Get all app services, as well as their configurations and auth settings. Only
+            return the app services with easy auth
+        """
+        app_services = self.get_app_services()
+        easy_auth_as=[]
+        for app in app_services:
+            if app.properties["config"]["authSettingsV2"]["platform"]["enabled"]:
+                easy_auth_as.append(app)
+        return easy_auth_as
+
+    def get_functions_with_easy_auth(self):
+        """
+            Get all functions, as well as their configurations and auth settings. Only
+            return the functions with easy auth
+        """
+        functions = self.get_functions()
+        funcs=[]
+        for func in functions:
+            if func.properties["config"]["authSettingsV2"]["platform"]["enabled"]:
+                funcs.append(func)
+        return funcs
+
+    def get_functions(self):
+        """
+            Get all functions, as well as their configurations and auth settings.
+        """
+        app_services_and_functions = self.get_resources(resource_type="Microsoft.Web/sites")
+        app_services = []
+        for res in app_services_and_functions:
+            if "function" not in res.kind: continue
+            if "workflow" in res.kind: continue
+            app_services.append(res)
+
+        for app_service in app_services:
+
+            response = self._send_request( f"{app_service.id}",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+        
+            props = response.json()["properties"]
+            app_service.properties = props
+
+            app_service.properties["config"] = {}
+
+
+            response = self._send_request( f"{app_service.id}/config/web",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service configs"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+        
+            configs = response.json()["properties"]
+            app_service.properties["config"]["web"] = configs
+
+            response = self._send_request( f"{app_service.id}/config/authSettingsV2",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service auth settings"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+            
+            settings = response.json()["properties"]
+
+            app_service.properties["config"]["authSettingsV2"] = settings
+        return app_services
+
     def get_app_services(self):
         """
             Get all app services, as well as their configurations and auth settings.
