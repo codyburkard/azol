@@ -20,6 +20,11 @@ class ArmRequestFailedException(Exception):
         unexpectedly fail
     """
 
+class AzolArmUnsupportedException(Exception):
+    """
+        Generic exception that is raised if something is not supported on the client
+    """
+
 class ArmClient( OAuthHTTPClient ):
     """
         An HTTP client for interacting with the Azure Resource Manager API
@@ -911,6 +916,184 @@ class ArmClient( OAuthHTTPClient ):
 
         descendants = response.json()["value"]
         return descendants
+    
+    def get_app_settings( self, resource_id ):
+        """
+            Get a dictionary containing key-values for all app service app settings.
+        """
+        response = self._send_request( f"{resource_id}/config/appsettings/list",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="POST" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service settings"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+        
+        settings = response.json()["properties"]
+        return settings
+
+    def get_app_service_processes(self, resource_id):
+        """
+           Get all processes running on the app service.
+        """
+        response = self._send_request( f"{resource_id}/processes",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="GET" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service processes"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+        
+        processes = response.json()
+        return processes["value"]
+
+    def get_app_service_environment_variables(self, resource_id):
+        """
+           Get environment variales of the default process for an app service
+           of function. Uses the ARM API. Only works for Windows as of may 2025 -
+           alternatively, use kudu for linux with kuduClient
+
+           resource_id: the resource id of an app service
+        """
+        app_svc=self.get_app_service(resource_id)
+        if 'linux' in app_svc.kind:
+            raise AzolArmUnsupportedException
+        processes=self.get_app_service_processes(resource_id)
+        default_process=None
+        for proc in processes:
+            if "user_name" in proc["properties"].keys() and "IIS APPPOOL" in proc["properties"]["user_name"]:
+                default_process = proc["properties"]["id"]
+        process=self.get_app_service_process(resource_id, default_process)
+        environment_variables = process["properties"]["environment_variables"]
+        return environment_variables        
+
+    def get_app_service_process(self, resource_id, process_id):
+        """
+           Get details about the process running on the app service.
+
+           resource_id: the resource id of an app service
+           process_id: the process id to fetch
+        """
+        response = self._send_request( f"{resource_id}/processes/{process_id}",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="GET" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service process"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+        
+        process = response.json()
+        return process
+
+    def get_app_service_process_dump(self, resource_id, process_id):
+        """
+            Call the ARM API to dump the process memory on an app service
+
+            resource_id: the resource id of an app service
+            process_id: the process id to fetch
+        """
+        response = self._send_request( f"{resource_id}/processes/{process_id}/dump",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="GET" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service process"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+        
+        process_bytes = response.content
+        return process_bytes
+
+    def get_app_service(self, resource_id):
+        """
+            Get a specific app service, as well as its configurations and auth settings.
+        """
+        app_service = self.get_resource(resource_id)
+        
+
+        app_service.properties["config"] = {}
+        response = self._send_request( f"{app_service.id}/config/web",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="GET" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service configs"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+    
+        configs = response.json()["properties"]
+        app_service.properties["config"]["web"] = configs
+
+        response = self._send_request( f"{app_service.id}/config/authSettingsV2",
+                                    query_parameters={ "api-version": "2024-04-01"},
+                                    method="GET" )
+        if response.status_code != 200:
+            logging.error( "%s error on ARM API request to get app service auth settings"
+                        "Raw error: %s", response.status_code,
+                        response.content )
+            raise ArmRequestFailedException()
+        
+        settings = response.json()["properties"]
+
+        app_service.properties["config"]["authSettingsV2"] = settings
+        return app_service
+
+    def get_app_services(self):
+        """
+            Get all app services, as well as their configurations and auth settings.
+        """
+        app_services_and_functions = self.get_resources(resource_type="Microsoft.Web/sites")
+        app_services = []
+        for res in app_services_and_functions:
+            if "function" in res.kind: continue
+            if "workflow" in res.kind: continue
+            app_services.append(res)
+
+        for app_service in app_services:
+
+            response = self._send_request( f"{app_service.id}",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+        
+            props = response.json()["properties"]
+            app_service.properties = props
+
+            app_service.properties["config"] = {}
+
+
+            response = self._send_request( f"{app_service.id}/config/web",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service configs"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+        
+            configs = response.json()["properties"]
+            app_service.properties["config"]["web"] = configs
+
+            response = self._send_request( f"{app_service.id}/config/authSettingsV2",
+                                        query_parameters={ "api-version": "2024-04-01"},
+                                        method="GET" )
+            if response.status_code != 200:
+                logging.error( "%s error on ARM API request to get app service auth settings"
+                            "Raw error: %s", response.status_code,
+                            response.content )
+                raise ArmRequestFailedException()
+            
+            settings = response.json()["properties"]
+
+            app_service.properties["config"]["authSettingsV2"] = settings
+        return app_services
 
     def post( self, path, api_version, data ):
         """Send a POST request to ARM, and return the raw results
@@ -977,6 +1160,8 @@ class ArmClient( OAuthHTTPClient ):
                                               query_parameters={ "api-version": api_version},
                                               json=data )
         return arm_raw_response.json()
+
+     
 
     def get( self, path, api_version=None ):
         """Send a GET request to ARM, and return the raw results

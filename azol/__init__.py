@@ -7,7 +7,7 @@ from azol.constants import ( AZOL_HOME, PROVIDER_CACHE_DIR, PROVIDER_CACHE,
 from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient,
                            DataFactoryClient, KuduClient )
 from azol.credentials import User, ApplicationObject, ServicePrincipal, AccessToken
-from azol.utils import parse_jwt, get_tenant_id, is_token_expired
+from azol.utils import *
 from azol.providers import KeyVaultProvider, FileSecretProvider
 
 # Create the azol home directory
@@ -35,6 +35,10 @@ __all__ = [
     "parse_jwt",
     "get_tenant_id",
     "is_token_expired",
+    "decrypt_easy_auth_token",
+    "get_strings_from_bytes",
+    "create_signed_easy_auth_token",
+    "get_easy_auth_user_tokens",
     "KeyVaultProvider",
     "FileSecretProvider"
 ]
