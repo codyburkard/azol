@@ -8,10 +8,25 @@ import requests
 from cryptography import x509
 from cryptography.hazmat.primitives.serialization import pkcs12, Encoding
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
 from cryptography.x509.oid import NameOID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+import hashlib
+import hmac
+
+class AzolEasyAuthIdpNotSupportedException(Exception):
+    """
+        Exception that is raised when a user tries to use an
+        unsupported easy auth idp
+    """
+
+class AzolEasyAuthUnauthorizedZumoTokenException(Exception):
+    """
+        Exception that is raised when x-zumo-header is not valid
+    """
 
 @dataclass()
 class AzolX509:
@@ -151,3 +166,115 @@ def create_x509_cert(common_name, password=None, country_name=None, state=None, 
         private_cert=base64.b64encode(pfx)
     )
     return res
+
+def decrypt_easy_auth_token(encrypted_b64_data, hex_key):
+    key = bytes.fromhex(hex_key)
+    encrypted_token_and_iv_bytes = base64.b64decode(encrypted_b64_data)
+    iv = encrypted_token_and_iv_bytes[0:16]
+    encrypted_token_bytes = encrypted_token_and_iv_bytes[16:]
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    padded_token_contents=decryptor.update(encrypted_token_bytes) + decryptor.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    data = unpadder.update(padded_token_contents)
+    token_contents = data + unpadder.finalize()
+    token_plaintext_json_contents = json.loads(token_contents)
+    return token_plaintext_json_contents
+
+def get_easy_auth_user_tokens(zumo_token, site_url):
+    """
+        Use an X-ZUMO-TOKEN to collect user tokens from Easy Auth
+
+        zumo-token: the easy auth JWT token used for end user authentication
+
+        site_url: the url of the app service or function
+    """
+
+    res = requests.get(site_url + "/.auth/me", headers = {"X-ZUMO-AUTH": zumo_token})
+    if res.status_code != 200:
+        raise AzolEasyAuthUnauthorizedZumoTokenException
+
+    return res.json()
+
+def create_easy_auth_subject(identifier):
+    return str(uuid.UUID(bytes_le=hashlib.md5(identifier.encode()).digest())).replace("-", "")
+
+def create_signed_easy_auth_token(site_url, signing_key_hex, user_object_id, user_principal_name,
+                                  valid_days=7, idp="aad"):
+    """
+        Create a signed token that may be used against an easy auth-authenticated app service
+        or function, for the provided user.
+
+        Curently, only supports the aad idp.
+
+        site_url: the url of the app service or function, ending with a "/" - this is used for the
+                  issuer and audience field of the token
+        
+        signing_key_hex: the raw signing key in hex format, as found in the environment variables
+
+        user_object_id: the object id of the target user, from entra ID
+
+        user_principal_name: the UPN of the entra user
+
+        valid_days: how long the token should be valid for
+
+        idp: the easyAuth idp to craft a token for. Currently only supports "aad"
+    """
+    if idp not in ["aad"]: raise AzolEasyAuthIdpNotSupportedException
+    signing_key_bytes = bytes.fromhex(signing_key_hex)
+    expiry=str(int((datetime.now(timezone.utc) + timedelta(days=valid_days)).timestamp()))
+    iat=str(int(datetime.now(timezone.utc).timestamp()))
+    nbf=str(int(datetime.now(timezone.utc).timestamp()))
+    ver="3"
+    idp=idp
+    aud=site_url
+    iss=site_url
+    subject = create_easy_auth_subject(user_principal_name)
+    stable_subject = create_easy_auth_subject(user_object_id)
+    sub=f"sid:{subject}"
+    stable_sid=f"sid:{stable_subject}"
+
+    # create token
+    header = {
+        "alg": "HS256",
+        "typ": "JWT"
+    }
+
+    body = {
+        "stable_sid": stable_sid,
+        "sub": sub,
+        "idp": idp,
+        "ver": ver,
+        "nbf": nbf,
+        "exp": expiry,
+        "iat": iat,
+        "iss": iss,
+        "aud": aud
+    }
+
+    header_string=json.dumps(header).encode()
+    body_string=json.dumps(body).encode()
+    b64_header_string=base64.b64encode(header_string).rstrip(b"=")
+    b64_body_string=base64.b64encode(body_string).rstrip(b"=")
+    body_and_header = b64_header_string + b"." + b64_body_string
+
+    # sign the token
+    signature=base64.urlsafe_b64encode(hmac.new(signing_key_bytes, msg=body_and_header, 
+                                                digestmod=hashlib.sha256).digest()).rstrip(b"=")
+    jwt=body_and_header + b"." + signature
+    return jwt.decode()
+
+def get_strings_from_bytes(raw_bytes, min_length=3):
+    ascii_string = ''
+    current_string = ''
+    for b in raw_bytes:
+        if 31 < b < 127:
+            current_string += chr(b)
+        else:
+            if len(current_string) >= min_length:
+                ascii_string += current_string
+                ascii_string += "\n"
+            current_string = ''
+    return ascii_string.split("\n")
+
+

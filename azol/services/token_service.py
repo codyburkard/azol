@@ -363,7 +363,6 @@ class TokenService( object ):
                 "sub": self.credential_object.get_client_id()
             }
 
-            
             b64_header=base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
             b64_body=base64.urlsafe_b64encode(json.dumps(assertion_body).encode()).decode().rstrip('=')
             header_body=b64_header + '.' + b64_body
