@@ -446,7 +446,7 @@ class GraphClient( OAuthHTTPClient ):
         if fast:
             results=asyncio.run(self._get_all_service_principals_async())
         else:
-            results=self._get_all_service_principals( select=[], filter=None)
+            results=self._get_all_service_principals( select=select, filter=None)
         return results
 
 
