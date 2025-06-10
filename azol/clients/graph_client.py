@@ -413,7 +413,7 @@ class GraphClient( OAuthHTTPClient ):
         if fast:
             results=asyncio.run(self._get_all_users_async())
         else:
-            results=self._get_all_users( select=[], filter=None)
+            results=self._get_all_users( select=select, filter=None)
         return results
 
 
@@ -712,6 +712,22 @@ class GraphClient( OAuthHTTPClient ):
                                        "&$select=owners,id,displayName" )
         if response:
             return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_graph_role_assignments( self ):
+        """
+            Get all role assignments to the graph API
+        """
+        response = self._send_request( "/serviceprincipals(appid='00000003-0000-0000-c000-000000000000')/appRoleAssignedTo" )
+        if response:
+            roles = self._get_all_graph_objects(response)
+            for role in roles:
+                role_id=role["appRoleId"]
+                if role_id in appPermissionNameMap.keys():
+                    role["roleName"] = appPermissionNameMap[role_id]
+                else:
+                    role["roleName"] = "unknown"
+            return roles
         raise GraphRequestFailedException()
 
     def get_all_sp_api_permissions( self ):
