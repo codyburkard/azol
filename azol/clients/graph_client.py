@@ -746,9 +746,14 @@ class GraphClient( OAuthHTTPClient ):
             sps = self._get_all_graph_objects(response)
             for sp in sps:
                 for ass in sp["appRoleAssignments"]:
-                    ass["azolannotations"] = {
-                        "permissionName": appPermissionNameMap[ass["appRoleId"]]
-                    }
+                    if ass["appRoleId"] in appPermissionNameMap.keys():
+                        ass["azolannotations"] = {
+                            "permissionName": appPermissionNameMap[ass["appRoleId"]]
+                        }
+                    else:
+                        ass["azolannotations"] = {
+                            "permissionName": "unknown"
+                        }
             return sps
         raise GraphRequestFailedException()
 
