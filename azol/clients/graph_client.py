@@ -671,28 +671,48 @@ class GraphClient( OAuthHTTPClient ):
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
 
-    def get_all_groups( self, select=[] ):
-        """Get all group ids and displaynames in Entra Id.
+    def get_all_groups( self, select=[], owners=False ):
+        """Get all groups in Entra Id.
 
-        Calls the graph API get get all groups, and nested memberships.
+           By default, only get the id and displayName attributes. 
+           Other attributes can be collected if explicitly requested using "select".
+           Collect all attributes by setting select to None. Note that if owners
+           is set to true and select is set to None, the full  owner
+           objects will be returned due to limitiations in the Graph OData API.
 
         Args:
-            select - (list) - a list of json attributes that should be returned from all group.
+            select - (list) - A list of json attributes that should be returned from all group.
                     if this is None, the select query parameter will not be used in the request
 
+            owners - (bool) - If set to True, the the owners of all groups will also be collected
+                    in the graph API request. Defaults to False
         Returns:
-            A list of dictionaries, containing group ids and names
+            A list of dictionaries, containing group information
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/groups?$select=id,displayName"
-        elif select == None:
-            path_and_params="/groups"
+        path="/groups"
+        expand_parameter="owners($select=id,displayName)"
+        default_attributes=["id", "displayName"]
+        query_parameters = {}
+        if select != None:
+            all_attributes = set(default_attributes + select)
+            if owners == True:
+                all_attributes.add("owners")
+            select_parameter = ",".join(list(all_attributes))
+            query_parameters["$select"] = select_parameter
         else:
-            path_and_params="/groups?$select="+",".join(select)
+            select_parameter = ''
+        
+        if owners == True:
+            query_parameters["$expand"] = expand_parameter
+        
+        concatenated_params = "&".join([f"{param}={value}" for param, value in query_parameters.items()])
+        path_and_params = f"{path}?{concatenated_params}"
+
         response = self._send_request( path_and_params )
+        
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
