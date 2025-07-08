@@ -431,26 +431,95 @@ class GraphClient( OAuthHTTPClient ):
         res = sum(res_list, [])
         return res
 
-    async def _get_all_service_principals_async(self):
+    async def _get_all_service_principals_async(self, select=[]):
+        select_list = ",".join(select)
         loop = asyncio.get_event_loop()
         threads=[]
         buckets=["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6","7","8","9"]
         for bucket in buckets:
-            task=loop.run_in_executor(None, self._get_all_service_principals, None, f"startsWith(appId,'{bucket}')")
+            task=loop.run_in_executor(None, self._get_all_service_principals_fast, select_list, f"startsWith(appId,'{bucket}')")
             threads.append(task)
         res_list=await asyncio.gather(*threads)
         res = sum(res_list, [])
         return res
 
-    def get_all_service_principals( self, select=[], filter=None, fast=False ):
+    def _get_all_service_principals_fast( self, select_string, filter_string=None ):
+        query_params = {}
+        query_params["$count"] = "true"
+        query_params["$filter"] = filter_string
+        if select_string != '':
+            query_params["$select"] = select_string
+        query_param_string = "&".join([f"{param}={value}" for param, value in query_params.items()])
+        path_and_params=f"/servicePrincipals?{query_param_string}"
+        headers={}
+        if filter is not None:
+            headers={"ConsistencyLevel": "Eventual"}
+
+        response = self._send_request( path_and_params, headers=headers )
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def get_all_service_principals( self, select=[], owners=False, fast=False ):
+        """Get all service principals in the directory
+
+           By default, only get the id and displayName attributes. 
+           Other attributes can be collected if explicitly requested using "select".
+           Collect all attributes by setting select to None. Note that if owners
+           is set to true and select is set to None, the full  owner
+           objects will be returned due to limitiations in the Graph OData API.
+
+        Args:
+            select - (list) - A list of json attributes that should be returned from all  service principals.
+                    if this is None, the select query parameter will not be used in the request
+
+            owners - (bool) - If set to True, the the owners of all  service principals will also be collected
+                    in the graph API request. Defaults to False. Not compatible with the "fast" parameter due
+                    to limitations in the graph API
+            
+            fast - (bool) - If True, speed up collection using multiple threads. Not compatible with the
+                    "owners" parameter. If both are specified, the owners parameter will be ignored.
+        Returns:
+            A list of dictionaries, containing service principal information
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+        """
         if fast:
-            results=asyncio.run(self._get_all_service_principals_async())
+            results=asyncio.run(self._get_all_service_principals_async(select=select, owners=owners))
         else:
-            results=self._get_all_service_principals( select=select, filter=None)
+            results=self._get_all_service_principals( select=select, owners=owners)
         return results
 
 
-    def _get_all_service_principals( self, select=[], filter=None ):
+    def _get_all_service_principals( self, select=[], owners=False ):
+        
+        path="/servicePrincipals"
+        expand_parameter="owners($select=id,displayName)"
+        default_attributes=["id", "displayName"]
+        query_parameters = {}
+        if select != None:
+            all_attributes = set(default_attributes + select)
+            if owners == True:
+                all_attributes.add("owners")
+            select_parameter = ",".join(list(all_attributes))
+            query_parameters["$select"] = select_parameter
+        else:
+            select_parameter = ''
+        
+        if owners == True:
+            query_parameters["$expand"] = expand_parameter
+        
+        concatenated_params = "&".join([f"{param}={value}" for param, value in query_parameters.items()])
+        path_and_params = f"{path}?{concatenated_params}"
+
+        response = self._send_request( path_and_params )
+        
+        if response:
+            return self._get_all_graph_objects(response)
+        raise GraphRequestFailedException()
+
+    def _gets_all_service_principals( self, select=[], filter=None ):
         """Get all service principals in the directory.
 
         Args:
@@ -462,51 +531,50 @@ class GraphClient( OAuthHTTPClient ):
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if filter is None:
-            filter_param_string=""
-        else:
-            filter_param_string=filter
-        if select == []:
-            if filter is not None:
-                path_and_params="/servicePrincipals?$select=id,displayName,appId" + f"&$count=true&$filter={filter_param_string}"
-            else:
-                path_and_params="/servicePrincipals?$select=id,displayName,appId"
-        elif select == None:
-            if filter is not None:
-                path_and_params=f"/servicePrincipals?$count=true&$filter={filter_param_string}"
-            else:
-                path_and_params="/servicePrincipals?$select=id,displayName,appId"
-        else:
-            if filter is not None:
-                path_and_params="/servicePrincipals?$select="+",".join(select) + f"&$count=true&$filter={filter_param_string}"
-            else:
-                path_and_params="/servicePrincipals?$select="+",".join(select)
-        
-        headers={}
-        if filter is not None:
-            headers={"ConsistencyLevel": "Eventual"}
+        pass
 
-        response = self._send_request( path_and_params, headers=headers )
-        if response:
-            return self._get_all_graph_objects(response)
-        raise GraphRequestFailedException()
+    def get_all_applications( self, select=[], owners=False ):
+        """Get all applications in the directory
 
-    def get_all_applications( self, select=[] ):
-        """Get all application objects in the directory.
+           By default, only get the id and displayName attributes. 
+           Other attributes can be collected if explicitly requested using "select".
+           Collect all attributes by setting select to None. Note that if owners
+           is set to true and select is set to None, the full  owner
+           objects will be returned due to limitiations in the Graph OData API.
 
+        Args:
+            select - (list) - A list of json attributes that should be returned from all applications.
+                    if this is None, the select query parameter will not be used in the request
+
+            owners - (bool) - If set to True, the the owners of all applications will also be collected
+                    in the graph API request. Defaults to False
         Returns:
-            A list of objects containing object id and displayName of all application objects
+            A list of dictionaries, containing application information
 
         Raises:
             GraphRequestFailedException: An error occurred accessing the Graph API
         """
-        if select == []:
-            path_and_params="/applications?$select=id,displayName,appId"
-        elif select == None:
-            path_and_params="/applications"
+        path="/applications"
+        expand_parameter="owners($select=id,displayName)"
+        default_attributes=["id", "displayName"]
+        query_parameters = {}
+        if select != None:
+            all_attributes = set(default_attributes + select)
+            if owners == True:
+                all_attributes.add("owners")
+            select_parameter = ",".join(list(all_attributes))
+            query_parameters["$select"] = select_parameter
         else:
-            path_and_params="/applications?$select="+",".join(select)
+            select_parameter = ''
+        
+        if owners == True:
+            query_parameters["$expand"] = expand_parameter
+        
+        concatenated_params = "&".join([f"{param}={value}" for param, value in query_parameters.items()])
+        path_and_params = f"{path}?{concatenated_params}"
+
         response = self._send_request( path_and_params )
+        
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
