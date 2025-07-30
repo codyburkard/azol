@@ -5,7 +5,7 @@ from azol.utils.utils import decrypt_dpapi
 import json
 from azol.models.devops_rsa_parameters import DevOpsRSAParameters
 import base64
-
+import re
 
 def is_self_hosted():
     '''
@@ -152,3 +152,32 @@ def get_credentials_file():
     agent_data=json.load(f)
     f.close()
     return agent_data
+
+def get_latest_session_id():
+    '''
+        For use in Azure Devops pipeline tasks.
+
+        Try to get the latest session ID from the agent logs.
+
+        The session ID is needed in order to kill an agent and spoof it. 
+        The session ID can be found in 'agent_home/_diag/Agent_date-utc.logs' files.
+        This method searches for the most recent file, and looks for the last session
+        ID in those logs. This shoud represent the current session ID
+
+         Returns:
+            A session ID if one was found, else None
+    '''
+    home_directory = get_agent_home_directory()
+    diagnostics_directory = os.path.normpath(home_directory + "/_diag") 
+    files = [f for f in os.listdir(diagnostics_directory) 
+             if os.path.isfile(os.path.join(diagnostics_directory, f))
+             and f.startswith("Agent")]
+    files.sort()
+    latest = files[-1]
+    full_path=os.path.join(diagnostics_directory, latest)
+    print(full_path)
+    with open(full_path) as f: content = f.read()
+    q = re.compile("[sS]ession '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})'",re.S|re.M)
+    session_ids = q.findall(content)
+    if session_ids == []: return None
+    return session_ids[-1]
