@@ -191,25 +191,6 @@ class TokenService( object ):
             return None
         return token
 
-    def _sign_token( self, validity, client_id ):
-        now=int(datetime.now().timestamp()-100)
-        later=int(datetime.now().timestamp()+validity)
-
-        header={
-            "alg": "RS256",
-            "typ": "JWT",
-            "x5t": x5t,#'CDC6D70E0D295EDA890CC75E0721E0C5080D11F1'#x5t#"hOBcHZi846VCHSJbFAs26Go9VTQ"
-        }
-        body={
-            "aud": f"https://login.microsoftonline.com/{self._tenant}/oauth2/v2.0/token",
-            "exp": later,
-            "iss": client_id,
-            "jti": str(uuid.uuid4()),
-            "nbf": now,
-            "iat": now,
-            "sub": client_id
-        }
-
     def fetch_token( self, validity=28800 ):
         """
             Initiates an authorization flow and caches a new token.
