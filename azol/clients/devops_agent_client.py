@@ -12,13 +12,34 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import requests
 from pprint import pprint
 
+class DevOpsAgentInvalidClientException(Exception):
+    """An exception when a devops agent client id was incorrect"""
+    def __init__(self, *args, **kwargs):
+        default_message = "The client id used for the agent is invalid"
+        if not args: args = (default_message,)
+        super().__init__(*args, **kwargs)
+
+class DevOpsAgentAuthenticationException(Exception):
+    """An exception when a devops agent cannot authenticate"""
+    def __init__(self, *args, **kwargs):
+        default_message = "Could not authenticate to Azure DevOps using the supplied credentials"
+        if not args: args = (default_message,)
+        super().__init__(*args, **kwargs)
+
 class DevOpsAgentSessionExistsAzolException(Exception):
     """An exception when a devops agent session already exists for an agent"""
-    pass
+    def __init__(self, *args, **kwargs):
+        default_message = "A session for the agent already exists"
+        if not args: args = (default_message,)
+        super().__init__(*args, **kwargs)
 
 class DevOpsAgentSessionCreationException(Exception):
     """An exception when an error arises while creating a devops session"""
-    pass
+    def __init__(self, *args, **kwargs):
+        default_message = 'Could not create a devops session'
+        if not args: args = (default_message,)
+
+        super().__init__(*args, **kwargs)
 
 class AzureDevOpsAgentClient( object ):
     """
@@ -60,7 +81,16 @@ class AzureDevOpsAgentClient( object ):
 
         resp=requests.post(f"https://vssps.dev.azure.com/{self.devops_org_name}/_apis/oauth2/token",
                             headers=headers, data=body)
-        
+        resp_data = resp.json()
+        if "access_token" not in resp_data.keys():
+            if "error" in resp_data.keys():
+                if resp_data["error"] == "invalid_client":
+                    raise DevOpsAgentInvalidClientException
+                raise DevOpsAgentAuthenticationException
+            if "typeKey" in resp_data.keys():
+                if resp_data["typeKey"] == "RegistrationNotFoundException":
+                    raise DevOpsAgentInvalidClientException
+            raise DevOpsAgentAuthenticationException
         token=resp.json()["access_token"]
         self._current_token=token
         return token
@@ -129,9 +159,7 @@ class AzureDevOpsAgentClient( object ):
                            headers=headers, json=body)
         if resp.status_code == 409:
             logging.warning("Could not create session - Session already exists.")
-            raise DevOpsAgentSessionExistsAzolException(f"A session for agent {self.agent_id}"
-                                                        f" against organization {self.devops_org_name}"
-                                                        "already exists")
+            raise DevOpsAgentSessionExistsAzolException()
 
         contents=resp.json()
 
@@ -206,7 +234,7 @@ class AzureDevOpsAgentClient( object ):
 
                     logging.error(resp.status_code)
                     logging.error(resp.content)
-                    raise DevOpsAgentSessionCreationException("Could not create a devops session")
+                    raise DevOpsAgentSessionCreationException()
                 message_json = resp.json()
 
                 iv_b64 = message_json["iv"]

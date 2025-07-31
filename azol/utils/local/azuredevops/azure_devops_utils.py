@@ -1,7 +1,7 @@
 """Module containing utilities for working with Azure DevOps Agents. For use in Azure Devops pipeline tasks."""
 
 import os
-from azol.utils.utils import decrypt_dpapi
+from azol.utils.local.windows import decrypt_dpapi
 import json
 from azol.models.devops_rsa_parameters import DevOpsRSAParameters
 import base64
