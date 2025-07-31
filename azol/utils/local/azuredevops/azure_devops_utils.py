@@ -6,6 +6,8 @@ import json
 from azol.models.devops_rsa_parameters import DevOpsRSAParameters
 import base64
 import re
+import requests
+import logging
 
 def is_self_hosted():
     '''
@@ -19,6 +21,66 @@ def is_self_hosted():
     if self_hosted == "1":
         return True
     return None
+
+def get_oidc_token_uri():
+    '''
+        For use in Azure Devops pipeline tasks.
+
+        Tries to get an OIDC token uri for the current job
+        
+        returns the URI or None if it is not found
+    '''
+    return os.getenv("SYSTEM_OIDCREQUESTURI")
+
+def get_oidc_token(system_access_token, service_connection_id=None):
+    '''
+        For use in Azure Devops pipeline tasks.
+
+        Tries to get an OIDC token on behalf of the current job
+
+        Args:
+            system_access_token - (str) The system access token of the build.
+                                    To collect this, set an environment variable in the devOps
+                                    task like so:
+
+                                    steps:
+                                    - task: Powershell@2
+                                    inputs:
+                                        targetType: inline
+                                        script: |
+                                        $token = $env:SYSTEM_ACCESSTOKEN
+                                        # Split the token into parts so its content is not masked
+                                        # In job output. Remove the spaces when copying the token
+                                        write-host $token.substring(0,1)$token.substring(1,100)$token.substring(101)
+                                    env:
+                                        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+            service_connection_id - (str) The id(a guid) of the service connection 
+                                    which should be in the subject of the OIDC token.
+                                    If None, the subject in the OIDC token will be set to the
+                                    pipeline instead of a specific service connection
+        Returns:
+            An OIDC token
+    '''
+
+    headers = {
+        "Authorization": f"Bearer {system_access_token}",
+        "Accept": "application/json; api-version=7.2-preview.1",
+        "Content-Type": "application/json; api-version=7.2-preview.1"
+    }
+
+    query_params = {}
+    if service_connection_id:
+        query_params["serviceConnectionId"] = service_connection_id
+
+    oidc_uri = get_oidc_token_uri()
+
+    resp = requests.post(oidc_uri, headers=headers, params=query_params )
+    if resp.status_code != 200:
+        logging.error(resp.content)
+        raise Exception("Unable to collect OIDC token")
+    token=resp.json()["oidcToken"]
+    return token
 
 def get_agent_home_directory():
     '''
@@ -72,11 +134,11 @@ def load_rsa_credentials(credentials_dict):
 
         Load a .credentials_rsaparams file into a DevOpsRSAParameters object
 
-            Args:
-                credentials_dict - (dict) A dictionary containing the deserialized contents 
-                                        of a -credentials_rsaparams file
-            Returns:
-                A DevOpsRSAParameters object containing the RSA parameters
+        Args:
+            credentials_dict - (dict) A dictionary containing the deserialized contents 
+                                    of a -credentials_rsaparams file
+        Returns:
+            A DevOpsRSAParameters object containing the RSA parameters
 
     '''
     b64_d = credentials_dict["d"]
