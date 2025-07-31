@@ -175,7 +175,6 @@ def get_latest_session_id():
     files.sort()
     latest = files[-1]
     full_path=os.path.join(diagnostics_directory, latest)
-    print(full_path)
     with open(full_path) as f: content = f.read()
     q = re.compile("[sS]ession '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})'",re.S|re.M)
     session_ids = q.findall(content)
