@@ -28,6 +28,7 @@ __all__ = [
     "DataFactoryClient",
     "KuduClient",
     "AzureDevOpsAgentClient",
+    "AzureDevopsClient",
     "ArmClient",
     "KeyVaultClient",
     "AccessToken",
