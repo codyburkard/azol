@@ -18,6 +18,44 @@ class AzureDevopsClient( OAuthHTTPClient ):
         super().__init__( oauth_resource=devops_resource_id,
                           base_url=devops_base_url, *args, **kwargs)
 
+    def get_agent_pools( self, org_name ):
+        '''
+            Get all the agent pools that the current credential can read in the organization
+
+            Args
+                org_name - the name of the devops organization
+
+            Returns:
+                A list of agent pools
+        '''
+        query_params = { "api-version": "7.1-preview.1"}
+        url = f"/{org_name}/_apis/distributedtask/pools"
+        resp=self._send_request( url,  method="GET", query_parameters=query_params ) 
+        response_data = resp.json()
+        return response_data
+
+    def get_agents( self, org_name, agent_pool_id ):
+        '''
+            Get all the agents in an agent pool
+
+            Args
+                org_name - the name of the devops organization
+
+                agent_pool_id - the id of the agent pool
+
+            Returns:
+                A list of agents in the pool
+        '''
+        query_params = { 
+            "api-version": "7.1-preview.1",
+            "includeAssignedRequest": True,
+            "includeCapabilities": True
+        }
+        url = f"{org_name}/_apis/distributedtask/pools/{agent_pool_id}/agents"
+        resp=self._send_request( url,  method="GET", query_parameters=query_params ) 
+        response_data = resp.json()
+        return response_data
+
     def get_service_endpoint_types( self, org_name ):
         '''
             Get all the current service connection types
@@ -134,7 +172,7 @@ class AzureDevopsClient( OAuthHTTPClient ):
             Returns:
                 A list of role assignments
         """
-        query_params = { "api-version": "7.1-preview.1"}
+        query_params = { "api-version": "7.1"}
         url = (f"/{org_name}/_apis/securityroles/scopes/"
                 f"distributedtask.serviceendpointrole/roleassignments/resources/{project_id}_{endpoint_id}" )
         raw_response = self._send_request( url, query_parameters=query_params)
@@ -145,11 +183,104 @@ class AzureDevopsClient( OAuthHTTPClient ):
             
         return raw_response.json()["value"]
 
+    def get_repositories( self, org_name, project_name ):
+        '''
+            Get all repositories in the project
+
+            Args:
+                org_name - The devops organization name
+
+                project_name - The project name that contains the service endpoint
+
+                Returns:
+                    A list of repositories
+        '''
+        query_params = { "api-version": "7.1"}
+        raw_response = self._send_request( f"/{org_name}/{project_name}/_apis/git/repositories",
+                                           query_parameters=query_params )
+        if raw_response.status_code != 200:
+            logging.error( "ERROR while getting repositories" )
+            logging.error( raw_response.content )
+            raise Exception("Could not fetch repositories")
+            
+        return raw_response.json()
+
+    def get_repository( self, org_name, project_name, repository_id ):
+        '''
+            Get a devOps repository
+
+            Args:
+                org_name - The devops organization name
+
+                project_name - The project name that contains the service endpoint
+                
+                repository_id - The id of the repository
+            
+                Returns:
+                    A python object containing information about the repository
+        '''
+        query_params = { "api-version": "7.1"}
+        raw_response = self._send_request( f"/{org_name}/{project_name}/_apis/git/repositories/{repository_id}",
+                                           query_parameters=query_params )
+        if raw_response.status_code != 200:
+            logging.error( "ERROR while getting repository" )
+            logging.error( raw_response.content )
+            raise Exception("Could not fetch repository")
+            
+        return raw_response.json()
+
+
+    def get_pipelines( self, org_name, project_name ):
+        '''
+            Get all devOps pipelines
+
+            Args:
+                org_name - The devops organization name
+
+                project_name - The project name that contains the service endpoint
+
+                Returns:
+                    A list of pipelines
+        '''
+        query_params = { "api-version": "7.1"}
+        raw_response = self._send_request( f"/{org_name}/{project_name}/_apis/pipelines",
+                                           query_parameters=query_params )
+        if raw_response.status_code != 200:
+            logging.error( "ERROR while getting pipelines" )
+            logging.error( raw_response.content )
+            raise Exception("Could not fetch pipelines")
+            
+        return raw_response.json()
+
+    def get_pipeline( self, org_name, project_name, pipeline_id ):
+        '''
+            Get a devOps pipeline
+
+            Args:
+                org_name - The devops organization name
+
+                project_name - The project name that contains the service endpoint
+                
+                pipeline_id - The id of the pipeline
+            
+                Returns:
+                    A python object containing information about the pipeline
+        '''
+        query_params = { "api-version": "7.1-preview.1"}
+        raw_response = self._send_request( f"/{org_name}/{project_name}/_apis/pipelines/{pipeline_id}",
+                                           query_parameters=query_params )
+        if raw_response.status_code != 200:
+            logging.error( "ERROR while getting pipeline" )
+            logging.error( raw_response.content )
+            raise Exception("Could not fetch pipeline")
+            
+        return raw_response.json()
+
     def get_allowed_pipelines( self, org_name, project_name, endpoint_id ):
         """
             Get all pipelines that are authorized to use a service connection.
 
-            This command resurns an object that includes high level settings for the
+            This command returns an object that includes high level settings for the
             service connection as well as pipelines that are authorized.
 
             Args:
@@ -382,7 +513,7 @@ class AzureDevopsClient( OAuthHTTPClient ):
         return raw_response.json()
 
 
-    def get_organizations(self, member_id):
+    def get_organizations(self):
         """Get all organizations that the current logged in credential has access to
         
             Args:
@@ -391,7 +522,9 @@ class AzureDevopsClient( OAuthHTTPClient ):
             Returns:
                 A list of organizations
         """
-        query_params = { "api-version": "7.2-preview.1", "memberId": member_id}
+        profile_data = self.get_profile()
+
+        query_params = { "api-version": "7.2-preview.1", "memberId": profile_data["id"]}
         raw_response = self._send_request( url=f"https://app.vssps.visualstudio.com/_apis/accounts",
                                           query_parameters=query_params )
 
