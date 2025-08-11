@@ -13,6 +13,7 @@ from azol.clients.oauth_http_client import OAuthHTTPClient
 from azol.constants import OAuthResourceIDs, ARMURL
 from azol.models.generic_resource import GenericResource
 from azol.resources.rbac_roles import rbac_roles
+from azol.utils import parse_jwt
 
 class ArmRequestFailedException(Exception):
     """
@@ -423,6 +424,39 @@ class ArmClient( OAuthHTTPClient ):
                 arm_roles_map[ role_definition['id'] ] = role_definition[ 'name' ]
 
         return arm_roles_map
+
+    def get_own_rbac_role_assignments(self):
+        """
+            Get all RBAC role assignments of the current identity
+
+            Returns:
+                A list of GenericResource ojects containing the RBAC assignments
+        """
+        user_id = parse_jwt(self.get_current_token())[1]["oid"]
+        filter=f"principalId eq '{user_id}'"
+        all_assignments = []
+        subscriptions = self.get_subscriptions()
+        for sub in subscriptions:
+            arm_raw_response = self._send_request( f"/subscriptions/{sub}/providers/"
+                                                "Microsoft.Authorization/roleAssignments",
+                                                query_parameters={ "api-version": "2015-07-01",
+                                                                   "$filter": filter} )
+
+            if arm_raw_response.status_code != 200:
+                logging.error( "ERROR on ARM request: %s", arm_raw_response.content )
+                raise ArmRequestFailedException()
+            new_assignments = arm_raw_response.json()[ "value" ]
+            all_assignments += new_assignments
+        known_ids = []
+        final = []
+        for i, ass in enumerate(all_assignments):
+            if ass["id"] in known_ids:
+                continue
+            else:
+                known_ids.append(ass["id"])
+                final.append(ass)
+
+        return final
 
     def get_rbac_role_assignments(self):
         """Get all RBAC role assignments
@@ -904,8 +938,8 @@ class ArmClient( OAuthHTTPClient ):
             ArmRequestFailedException: An error occurred accessing the ARM API
 
         """
-        response = self._send_request( "/providers/Microsoft.Management/management_group"
-                                       "/{management_group}/descendants", 
+        response = self._send_request( "/providers/Microsoft.Management/managementGroups"
+                                       f"/{management_group}/descendants", 
                                        query_parameters={ "api-version": "2020-05-01"},
                                        method="GET" )
         if response.status_code != 200:
@@ -1264,12 +1298,11 @@ class ArmClient( OAuthHTTPClient ):
             namespace_and_provider=path.split('/providers/')[-1]
             namespace_and_provider_list=namespace_and_provider.split("/")
             namespace = namespace_and_provider_list[0].lower()
-            provider_and_resource = "/".join(namespace_and_provider_list[1:])
+            provider_and_resource = "/".join(namespace_and_provider_list[1:]).lower()
             matching_providers=[]
             for provider in self.providers[namespace].keys():
                 if provider in provider_and_resource:
                     matching_providers.append(provider)
-            
             provider=max(p for p in matching_providers)
             logging.info("Resolved namespace to ", namespace)
             logging.info("Resolved provider to ", provider)

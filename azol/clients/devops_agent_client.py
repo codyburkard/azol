@@ -126,7 +126,23 @@ class AzureDevOpsAgentClient( object ):
     
 
 
-    def kill_session(self, session_id):
+    def kill_session(self, session_id=None):
+        '''
+            Kill an existing session for this agent
+
+            If session_id is not specified, this function will try to kill the session it has created
+            using the "create_session" command
+
+            Args:
+                session_id - the session id that should be deleted
+            
+            Returns:
+                None
+        '''
+        if session_id == None:
+            session_id = self.session_id
+        if session_id == None:
+            raise Exception("No session id provided, and no session ID cached by the client")
         self.fetch_token()
         headers = {
             "Authorization": f"Bearer {self._current_token}",
@@ -136,7 +152,9 @@ class AzureDevOpsAgentClient( object ):
         resp=requests.delete(f"https://dev.azure.com/{self.devops_org_name}"
                              f"/_apis/distributedtask/pools/{self.pool_id}"
                              f"/sessions/{session_id}", headers=headers)
-        # TODO
+        if resp.status_code == 200:
+            self.session_id=None
+
         logging.info(f"Session {session_id} ended ")
     
     def create_session(self):

@@ -57,4 +57,32 @@ class DevOpsAgentCredential( Credential ):
                 exponent=exponent
             )
         elif rsa_parameters:
-            self.rsa_parameters = rsa_parameters
+            if type(rsa_parameters) == "DevOpsRSAParameters":
+                self.rsa_parameters = rsa_parameters
+            else:
+                b64_d = rsa_parameters["d"]
+                b64_p = rsa_parameters["p"]
+                b64_q = rsa_parameters["q"]
+                b64_dq = rsa_parameters["dq"]
+                b64_dp = rsa_parameters["dp"]
+                b64_inverseq = rsa_parameters["inverseQ"]
+                b64_modulus = rsa_parameters["modulus"]
+                b64_exponent = rsa_parameters["exponent"]
+                d = int.from_bytes(base64.b64decode(b64_d), "big")
+                q = int.from_bytes(base64.b64decode(b64_q), "big")
+                p = int.from_bytes(base64.b64decode(b64_p), "big")
+                dq = int.from_bytes(base64.b64decode(b64_dq), "big")
+                dp = int.from_bytes(base64.b64decode(b64_dp), "big")
+                inverseq = int.from_bytes(base64.b64decode(b64_inverseq), "big")
+                modulus = int.from_bytes(base64.b64decode(b64_modulus), "big")
+                exponent = int.from_bytes(base64.b64decode(b64_exponent), "big")
+                self.rsa_parameters = DevOpsRSAParameters(
+                    d=d,
+                    p=p,
+                    q=q,
+                    dp=dp,
+                    dq=dq,
+                    inverseq=inverseq,
+                    modulus=modulus,
+                    exponent=exponent
+                )

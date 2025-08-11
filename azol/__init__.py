@@ -3,9 +3,9 @@ from pathlib import Path
 from azol.constants import ( AZOL_HOME, PROVIDER_CACHE_DIR, PROVIDER_CACHE,
                              RBACRoleDefinitionIds, OAuthResourceIDs, OAUTHFLOWS,
                              FOCIClients )
-
 from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient,
-                           DataFactoryClient, KuduClient, AzureDevOpsAgentClient )
+                           DataFactoryClient, KuduClient, AzureDevOpsAgentClient,
+                           AzureDevopsClient )
 from azol.credentials import ( User, ApplicationObject, ServicePrincipal, AccessToken,
                              DevOpsAgentCredential )
 from azol.utils import *

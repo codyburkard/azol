@@ -1095,6 +1095,44 @@ class GraphClient( OAuthHTTPClient ):
             return None
         raise GraphRequestFailedException()
 
+    def get_all_service_principal_federated_identities( self ):
+        """Get all federated identities for service principals in the tenant.
+
+        Returns:
+           A list of federated identity objects for service principals with a federated identity
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+        """
+        response = self._send_request( "/servicePrincipals?$expand=federatedIdentityCredentials&"
+                                       "select=federatedIdentityCredentials,id,appId,displayName"
+                                       "&$filter=not(federatedIdentityCredentials/$count eq 0)",
+                                        headers={"ConsistencyLevel":"eventual"} )
+        if response.status_code != 200:
+            logging.error( "error on GRAPH API request. Raw error: %s ", response.content )
+            raise GraphRequestFailedException()
+
+        return self._get_all_graph_objects(response)
+
+    def get_all_application_federated_identities( self ):
+        """Get all federated identities for applications in the tenant.
+
+        Returns:
+           A list of federated identity objects for applications with a federated identity
+
+        Raises:
+            GraphRequestFailedException: An error occurred accessing the Graph API
+        """
+        response = self._send_request( "/applications?$expand=federatedIdentityCredentials&"
+                                       "select=federatedIdentityCredentials,id,appId,displayName"
+                                       "&$filter=not(federatedIdentityCredentials/$count eq 0)",
+                                        headers={"ConsistencyLevel":"eventual"} )
+        if response.status_code != 200:
+            logging.error( "error on GRAPH API request. Raw error: %s ", response.content )
+            raise GraphRequestFailedException()
+
+        return self._get_all_graph_objects(response)
+
     def create_new_local_service_principal( self, name="inconspicuous" ):
         """Create a new service principal.
 
