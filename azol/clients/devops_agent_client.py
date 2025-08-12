@@ -310,7 +310,7 @@ class AzureDevOpsAgentClient( object ):
         '''
 
         if not message_callback:
-            message_callback = _default_message_callback
+            message_callback = self._default_message_callback
 
         number_messages_received = 0
         epoch_time = int(time.time())
