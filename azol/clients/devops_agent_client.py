@@ -193,6 +193,7 @@ class AzureDevOpsAgentClient( object ):
         self._session_key = algorithms.AES(aes_key)
         logging.info(f"Session Created with ID {self.session_id}")
 
+    @classmethod
     def _default_message_callback(decrypted_message):
         '''
         Default callback when polling for devops messages. Collects job data and fetches
