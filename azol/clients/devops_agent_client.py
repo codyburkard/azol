@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import requests
 from pprint import pprint
 
+
 def _default_message_callback(decrypted_message):
     '''
     Default callback when polling for devops messages. Collects job data and fetches
@@ -219,8 +220,6 @@ class AzureDevOpsAgentClient( object ):
         assertion  = b64_header_body + "." + signature
         return assertion
     
-
-
     def kill_session(self, session_id=None):
         '''
             Kill an existing session for this agent
@@ -238,6 +237,7 @@ class AzureDevOpsAgentClient( object ):
             session_id = self.session_id
         if session_id == None:
             raise Exception("No session id provided, and no session ID cached by the client")
+
         self.fetch_token()
         headers = {
             "Authorization": f"Bearer {self._current_token}",
@@ -247,6 +247,7 @@ class AzureDevOpsAgentClient( object ):
         resp=requests.delete(f"https://dev.azure.com/{self.devops_org_name}"
                              f"/_apis/distributedtask/pools/{self.pool_id}"
                              f"/sessions/{session_id}", headers=headers)
+
         if resp.status_code == 200:
             self.session_id=None
 
@@ -345,10 +346,12 @@ class AzureDevOpsAgentClient( object ):
                     logging.error(resp.status_code)
                     logging.error(resp.content)
                     raise DevOpsAgentSessionCreationException()
+
                 logging.info("Got message. Deserializing to json...")
                 message_json = resp.json()
 
                 logging.info("Trying to decrypt...")
+
                 iv_b64 = message_json["iv"]
                 iv=base64.b64decode(iv_b64)
                 encrypted_b64_message=message_json["body"]
@@ -363,9 +366,11 @@ class AzureDevOpsAgentClient( object ):
 
                 plaintext = unpadder.update(plaintext) + unpadder.finalize()
                 decrypted_message=json.loads(plaintext)
+
                 logging.info("Sending message to callback...")
                 yield message_callback(decrypted_message)
                 number_messages_received += 1
 
             except requests.exceptions.Timeout:
                 logging.info("No new messages.")
+
