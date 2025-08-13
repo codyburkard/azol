@@ -6,7 +6,7 @@ from datetime import datetime
 from cryptography.hazmat.primitives.asymmetric import rsa
 import base64
 
-class AzureDevopsClient( OAuthHTTPClient ):
+class AzureDevOpsClient( OAuthHTTPClient ):
     """
         An HTTP client for interacting with the Azure Devops API
     """
