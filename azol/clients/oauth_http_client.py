@@ -22,6 +22,10 @@ class OAuthHTTPClient:
             if not cred.default_oauth_flow=="refresh_token":
                 username=cred.get_username()
                 tenant=username.split("@")[1]
+            else:
+                if cred.username_is_known():
+                    username=cred.get_username()
+                    tenant=username.split("@")[1]
         self.scopes=scopes
         self._useragent=useragent
         self.default_scope=True

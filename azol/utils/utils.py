@@ -36,6 +36,7 @@ class AzolX509:
     public_cert: str
     private_cert: str
 
+
 def string_between(whole_string, start_string, end_string, include_start=False):
     i=whole_string.index(start_string)
     z=whole_string[i:].index(end_string)+i

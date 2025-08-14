@@ -37,6 +37,7 @@ class OAuthResourceIDs:
         A data class containing constant strings for OAuth flow types
     """
     Arm="https://management.azure.com"
+    ArmLegacy="https://management.core.windows.net"
     Graph="https://graph.microsoft.com"
     KeyVault="https://vault.azure.net"
     CosmosDB="https://cosmos.azure.com"

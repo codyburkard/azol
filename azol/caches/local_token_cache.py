@@ -46,6 +46,7 @@ class LocalTokenCache( AzolCache ):
             data=""
             with open(self.file_name, "r", encoding="utf-8") as f:
                 data = f.read()
+                print(data)
             if data == "":
                 logging.warning("Token cache was empty. initializing")
                 with open(self.file_name, "w", encoding="utf-8") as f:
