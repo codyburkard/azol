@@ -5,7 +5,7 @@ from azol.credentials.service_principal import ServicePrincipal
 from azol.credentials.application_object import ApplicationObject
 from azol.credentials.user import User
 from azol.credentials.azure_devops_agent_key import DevOpsAgentCredential
-from azol.credentials.AzureCliUser import AzureCliUser
+from azol.credentials.azure_devops_pipeline_workload_federation_credential import ADOWorkloadFederationCredential
 
 __all__ = [
     "AccessToken",
@@ -13,5 +13,5 @@ __all__ = [
     "ApplicationObject",
     "User",
     "DevOpsAgentCredential",
-    "AzureCliUser"
+    "ADOWorkloadFederationCredential",
 ]

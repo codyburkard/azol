@@ -1,6 +1,7 @@
 """Module containing a parent class for an azol cache object"""
 import logging
 from azol.constants import DEFAULTSCOPE
+from azol.utils import parse_jwt
 
 class AzolCache:
     """Azol parent class for token caching"""
@@ -125,8 +126,9 @@ class AzolCache:
                         continue
                 token_data[ "access_token" ] = access_token
                 return
+        _, token_body, _signature = parse_jwt(access_token)
 
-        if refresh_token is None:
+        if "scp" not in token_body.keys():
             new_token = {
                 "type": "application",
                 "scopes":scopes,

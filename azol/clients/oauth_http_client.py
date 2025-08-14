@@ -5,16 +5,16 @@ import requests
 from azol.utils import is_token_expired, get_tenant_id, parse_jwt
 from azol.services.token_service import TokenService as tService
 from azol.credentials import User
-from azol.constants import UserAgents
+from azol.constants import UserAgents, OAUTHFLOWS, known_client_redirect_uris
 
 class OAuthHTTPClient:
     """
         Base class for OAuth HTTP client objects.
     """
 
-    def __init__( self, cred, oauth_resource, base_url=None,
+    def __init__( self, cred, oauth_resource, base_url=None, redirect_uri=None,
                   tenant=None, azol_id=None, oauth_flow=None, secrets_provider=None,
-                  use_persistent_cache=True, auto_refresh=True, scopes=[],
+                  use_persistent_cache=True, auto_refresh=True, scopes=[], use_token_broker=False,
                   useragent=UserAgents.Windows_Edge):
         if tenant is None:
             if cred.credentialType != "user":
@@ -26,6 +26,7 @@ class OAuthHTTPClient:
                 if cred.username_is_known():
                     username=cred.get_username()
                     tenant=username.split("@")[1]
+        self.use_token_broker=use_token_broker
         self.scopes=scopes
         self._useragent=useragent
         self.default_scope=True
@@ -38,11 +39,26 @@ class OAuthHTTPClient:
         self._resource = oauth_resource
         self._current_token = None
 
+        
+
         # if no specific oauth flow is provided, get the default from the credential
         if oauth_flow is None:
             oauth_flow=cred.get_default_oauth_flow()
+        if oauth_flow == OAUTHFLOWS.AUTHORIZATION_CODE or use_token_broker:
+            if redirect_uri == None:
+                client_id = cred.get_client_id()
+                logging.info(f"No redirect URI supplied. Checking for known"
+                              " redirect URIs for client id {client_id}...")
+                if client_id not in known_client_redirect_uris.keys():
+                    logging.error(f"No redirect URI found for client id {client_id}")
+                    raise Exception("A redirect URI must be supplied")
+                else:
+                    redirect_uri=known_client_redirect_uris[client_id][0]
+                    logging.info(f"Redirect URI found. Using first redirect in list:"
+                                 f"{redirect_uri}")
 
         self.token_service = tService( cred, tenant_id=tenant, oauth_flow=oauth_flow,
+                                    use_token_broker=use_token_broker,
                                     secrets_provider=secrets_provider,
                                     use_persistent_cache=use_persistent_cache,
                                     oauth_resource=oauth_resource, scopes=self.scopes,
@@ -50,6 +66,7 @@ class OAuthHTTPClient:
                                     profile_scope=self.profile_scope,
                                     openid_scope=self.openid_scope,
                                     offline_access_scope=self.offline_access_scope,
+                                    redirect_uri=redirect_uri,
                                     useragent=useragent )
 
         self._current_token = self.token_service.get_cached_token_if_not_expired()
