@@ -5,7 +5,7 @@ from azol.constants import ( AZOL_HOME, PROVIDER_CACHE_DIR, PROVIDER_CACHE,
                              FOCIClients )
 from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient,
                            DataFactoryClient, KuduClient, AzureDevOpsAgentClient,
-                           AzureDevopsClient )
+                           AzureDevOpsClient )
 from azol.credentials import ( User, ApplicationObject, ServicePrincipal, AccessToken,
                              DevOpsAgentCredential )
 from azol.utils import *
