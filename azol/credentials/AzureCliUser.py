@@ -28,6 +28,8 @@ class AzureCliUser( User ):
             cookies is also found for the user in the cache. to avoid this, 
             consider useing use_persistent_cache=False
         """
+        if username != None:
+            username = username.lower()
         client_id = FOCIClients.MicrosoftAzureCLI
         credential_file_contents = self._get_azure_cli_credential_file()
         refresh_tokens = credential_file_contents["RefreshToken"]
@@ -44,7 +46,7 @@ class AzureCliUser( User ):
                 account_map[account['username']]=[]
             account_map[account['username']].append(account)
 
-        if username not in account_map.keys():
+        if username not in list(map(lambda a: a.lower(), account_map.keys())):
             raise Exception(f"User {username} has no active sessions in the msal cache")
 
         user_accounts = account_map[username]
