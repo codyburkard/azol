@@ -16,8 +16,7 @@ class User( EntraIdCredential ):
     default_oauth_flow="device_code"
 
     def __init__( self, username=None, refresh_token=None, ests=None,
-                 ests_persistent=None, redirect_uri=None,
-                 client_id=FOCIClients.MicrosoftAzurePowershell,  
+                 ests_persistent=None, client_id=FOCIClients.MicrosoftAzurePowershell,
                   *args, **kwargs ):
         """
             User objects always have a username, pasword and refresh token. 
@@ -28,6 +27,8 @@ class User( EntraIdCredential ):
             If an ests cookies is provided, it will be overridden if an ests
             cookies is also found for the user in the cache. to avoid this, 
             consider useing use_persistent_cache=False
+
+            If use_token_broker is set to "True", 
         """
 
         super().__init__( *args, **kwargs)
@@ -42,7 +43,6 @@ class User( EntraIdCredential ):
         self._ests_persistent=None
 
         self._client_id=client_id
-        self._redirect_uri=redirect_uri
 
     def username_is_known( self ):
         """

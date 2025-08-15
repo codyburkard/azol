@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.x509.oid import NameOID
 from datetime import datetime, timedelta
+from importlib import import_module
 
 from .token_service_helpers import build_scope_string, auth_code_flow, ests_login_flow
 
@@ -37,11 +38,24 @@ class TokenService( object ):
     """
 
     def __init__( self, cred, tenant_id, oauth_flow,
-                  secrets_provider, use_persistent_cache, oauth_resource,
+                  secrets_provider, use_token_broker,
+                  use_persistent_cache, oauth_resource,
                   scopes, default_scope, profile_scope, openid_scope,
-                  offline_access_scope, azol_id=None, 
+                  offline_access_scope, 
+                  redirect_uri=None, azol_id=None, 
                   useragent=UserAgents.Windows_Edge):
         self.credential_object=cred
+        self.use_token_broker=use_token_broker
+        self._redirect_uri=redirect_uri
+        if use_token_broker:
+            try:
+                lib = import_module("pymsalruntime")
+            except ImportError as msg:
+                logging.error("Error: pymsalruntime package must be installed"
+                              "to use the Windows Token Broker (WAM)")
+                raise Exception("pymsalruntime package not available")
+            else:
+                globals()["pymsalruntime"] = lib
         self._tenant=tenant_id
         self._useragent=useragent
         self.oauth_flow=oauth_flow
@@ -123,6 +137,8 @@ class TokenService( object ):
     def refresh_token( self ):
         if self.credential_object.credentialType != "user":
             raise Exception("Cannot refresh a token for a non user credential type")
+        if self.use_token_broker:
+            raise Exception("Cannot refresh a token when using the built-in windows token broker")
         if self._refresh_token == None:
             raise Exception('Cannot refresh token - no refresh token present to refresh')
 
@@ -197,24 +213,50 @@ class TokenService( object ):
 
             Returns: None if a token couldnt be fetched, or the access token
         """
-        get_token_function = self.registered_token_flows[self.oauth_flow]
-        token_data_object = get_token_function()
-        if token_data_object is None:
-            logging.error("Could not get a new token")
-            raise IdentityPlatformRequestFailedException()
-        access_token = token_data_object["access_token"]
         ests_cookie=None
         ests_persistent_cookie=None
-        if "ests" in token_data_object.keys():
-            ests_cookie=token_data_object["ests"]
-        if "estspersistent" in token_data_object.keys():
-            ests_persistent_cookie=token_data_object["estspersistent"]
-
+        if not self.use_token_broker:
+            get_token_function = self.registered_token_flows[self.oauth_flow]
+            token_data_object = get_token_function()
+            if token_data_object is None:
+                logging.error("Could not get a new token")
+                raise IdentityPlatformRequestFailedException()
+            access_token = token_data_object["access_token"]
+        
+        
+            if "ests" in token_data_object.keys():
+                ests_cookie=token_data_object["ests"]
+            if "estspersistent" in token_data_object.keys():
+                ests_persistent_cookie=token_data_object["estspersistent"]
+        else:
+            # Use the WAM to get a token. requires pymsalruntime library.
+            params=pymsalruntime.MSALRuntimeAuthParameters(self._client_id, 
+                                                f"https://login.microsoftonline.com/{self._tenant}")
+            params.set_redirect_uri(self._redirect_uri)
+            params.set_additional_parameter("msal_gui_thread", "true")
+            if self.default_scope:
+                scopes = self.scopes + [f"{self.oauth_resource}/.default"]
+            else:
+                scopes = self.scopes
+            params.set_requested_scopes(scopes)
+            callback_data = pymsalruntime.CallbackData(is_interactive=True)
+            pymsalruntime.signin_interactively(pymsalruntime.get_console_window(), params, str(uuid.uuid4()),
+                                self.credential_object.get_username(), 
+                                lambda result, callback_data=callback_data: callback_data.complete(result))
+            callback_data.signal.wait()
+            error = callback_data.result.get_error()
+            if error != None:
+                msg = callback_data.result.get_error().get_context()
+                logging.error(f"Error getting a token using the Windows token broker: {msg}")
+                raise Exception("Error getting a token using the Windows token broker")
+            access_token=callback_data.result.get_access_token()
         if self._tenant=="common":
             _, body, _ = parse_jwt(access_token)
             self.set_tenant(body["tid"])
             
-        if self.offline_access_scope and self.credential_object.credentialType=="user":
+        if ( self.offline_access_scope
+             and self.credential_object.credentialType=="user" 
+             and not self.use_token_broker ):
             refresh_token = token_data_object["refresh_token"]
             self.token_cache.cache_or_update( access_token, self._tenant,
                                             self._client_id,
@@ -458,7 +500,7 @@ class TokenService( object ):
                     new_token_data=ests_login_flow(self._tenant, self._client_id,
                                                    self.ests_cookie, self.ests_persistent_cookie, 
                                                    self.credential_object.get_username(),
-                                                   extended_scope_string, self.credential_object._redirect_uri)
+                                                   extended_scope_string, self._redirect_uri)
                     self._refresh_token=new_token_data["refresh_token"]
                     return new_token_data
             else:
@@ -505,7 +547,7 @@ class TokenService( object ):
         
         client_id=self._client_id
 
-        redirect_url=self.credential_object._redirect_uri
+        redirect_url=self._redirect_uri
 
         scope_string=build_scope_string(self.oauth_resource, self.scopes, self.default_scope,
                                         self.openid_scope, self.profile_scope, self.offline_access_scope )

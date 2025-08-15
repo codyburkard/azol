@@ -57,7 +57,7 @@ def get_rsa_credentials_file():
         with open(rsa_credentials_file, "rb") as f:
             raw_contents = raw_contents + f.read()
         if is_windows():
-            decrypted_bytes = decrypt_dpapi(raw_contents)
+            decrypted_bytes = decrypt_dpapi(raw_contents).decode('utf-8')
         else:
             decrypted_bytes = raw_contents
             
