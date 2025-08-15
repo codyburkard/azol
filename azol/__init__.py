@@ -7,7 +7,7 @@ from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClie
                            DataFactoryClient, KuduClient, AzureDevOpsAgentClient,
                            AzureDevOpsClient )
 from azol.credentials import ( User, ApplicationObject, ServicePrincipal, AccessToken,
-                             DevOpsAgentCredential, AzureCliUser )
+                             DevOpsAgentCredential )
 from azol.utils import *
 from azol.providers import KeyVaultProvider, FileSecretProvider
 
@@ -36,7 +36,6 @@ __all__ = [
     "ServicePrincipal",
     "ApplicationObject",
     "User",
-    "AzureCliUser",
     "parse_jwt",
     "get_tenant_id",
     "is_token_expired",
