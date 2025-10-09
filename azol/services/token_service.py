@@ -359,7 +359,36 @@ class TokenService( object ):
         now=int(datetime.now().timestamp()-100)
         later=int(datetime.now().timestamp()+10000)
         
-        if credential_type == "x509":
+        if credential_type == "ado_oidc":
+            service_endpoint_id = self.credential_object.get_service_endpoint()
+            ado_system_access_token = self.credential_object.get_system_access_token()
+            oidc_url = self.credential_object.get_oidc_url()
+
+            # Using the system access token, call the oidc endpoint to get a new oauth token
+            headers = {
+                "Authorization": f"Bearer {ado_system_access_token}",
+                "Accept": "application/json; api-version=7.2-preview.1",
+                "Content-Type": "application/json; api-version=7.2-preview.1"
+            }
+
+            query_params = {
+                "serviceConnectionId": service_endpoint_id
+            }
+
+            r=requests.post(oidc_url, headers=headers, params=query_params)
+            response_body = r.json()
+            oidc_token=response_body["oidcToken"]
+
+            body={
+                "client_assertion": oidc_token,
+                "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                "client_id": self.credential_object.get_client_id(),
+                "scope": extended_scope_string,
+                "grant_type": OAUTHFLOWS.CLIENT_CREDENTIALS
+            }
+
+
+        elif credential_type == "x509":
 
             cert_and_key=self.credential_object.get_certificate()
             cert=cert_and_key.cert
