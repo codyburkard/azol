@@ -361,8 +361,11 @@ class TokenService( object ):
         
         if credential_type == "ado_oidc":
             service_endpoint_id = self.credential_object.get_service_endpoint()
+            logging.debug(f"using service endpoint id {service_endpoint_id}")
             ado_system_access_token = self.credential_object.get_system_access_token()
+            logging.debug(f"using access token {ado_system_access_token}")
             oidc_url = self.credential_object.get_oidc_url()
+            logging.debug(f"using oidcurl {oidc_url}")
 
             # Using the system access token, call the oidc endpoint to get a new oauth token
             headers = {
@@ -377,6 +380,7 @@ class TokenService( object ):
 
             r=requests.post(oidc_url, headers=headers, params=query_params)
             response_body = r.json()
+            logging.debug(f"Raw response from oidc request: {r.content}")
             oidc_token=response_body["oidcToken"]
 
             body={
