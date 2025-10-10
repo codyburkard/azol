@@ -26,7 +26,6 @@ class DevOpsAgentCredential( Credential ):
                                  "rsa_parameters_file_path argument was also supplied."
                                  "rsa_parameters_file_path argument will be used" )
             f=open(rsa_parameters_file_path, encoding="ascii")
-            #print(f.readlines())
             params_json=json.load(f)
             f.close()
 
