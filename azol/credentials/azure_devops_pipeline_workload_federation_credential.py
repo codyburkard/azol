@@ -10,6 +10,45 @@ import requests
 class ADOWorkloadFederationCredential( EntraIdCredential ):
     """
         A credential to log in as a service principal
+
+        IMPORTANT: two dependencies must be met in order to use this credential in a devops pipeline.
+
+                1)
+                    This access token must be in the local environment variables in the azure devops
+                    pipeline execution environment. to ensure that this is the case, request the
+                    system access token in the environment variables of the azure devops job. for example,
+                    in the yaml pipeline file, use the following script task to set the system access token
+                    to the variable "SYSTEM_ACCESSTOKEN":
+
+                        - script |
+                            env
+                          env:
+                            SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+                2) 
+                    The system access token will not be able to get an oidc token for a service
+                    endpoint unless that service endpoint is used in another task within the same
+                    job. The easiest way to make this work is to use the Azure CLI task, and run
+                    azol within that task. For example:
+
+
+                        - task: AzureCLI@2
+                            inputs:
+                                azureSubscription: 'your-service-connection-name'
+                                scriptType: 'bash'
+                                scriptLocation: 'InlineScript'
+                                inlineScript: |
+                                  pip install azol
+                                  python -c "
+                                  from azol import *;
+                                  cred=ADOWorkloadFederationCredential(
+                                    client_id='your-client-id', 
+                                    service_endpoint_id='your-service-endpoint-id' );
+                                  client=ArmClient(cred=cred, tenant='yourtenant.com');
+                                  client.fetch_token();
+                                  token=client.get_current_token()"
+                          env:
+                            SYSTEM_ACCESSTOKEN: $(System.AccessToken)
     """
 
     supportedOAuthFlows = [ OAUTHFLOWS.CLIENT_CREDENTIALS ]
@@ -40,16 +79,18 @@ class ADOWorkloadFederationCredential( EntraIdCredential ):
         """
             Get the system access token for the workload federation credential. 
 
-            This access token must be in the local environment variables in the azure devops
-            pipeline execution environment. to ensure that this is the case, request the
-            system access token in the environment variables of the azure devops job. for example,
-            in the yaml pipeline file, use the following script task to set the system access token
-            to the variable "SYSTEM_ACCESSTOKEN":
+            IMPORTANT: A dependency must be met in order to use this credential in a devops pipeline.
 
-                - script |
-                    env
-                env:
-                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+                    This access token must be in the local environment variables in the azure devops
+                    pipeline execution environment. to ensure that this is the case, request the
+                    system access token in the environment variables of the azure devops job. for example,
+                    in the yaml pipeline file, use the following script task to set the system access token
+                    to the variable "SYSTEM_ACCESSTOKEN":
+
+                        - script |
+                            env
+                          env:
+                            SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
             Args:
                 - var_name: The environment variable name that contains the system access token.
