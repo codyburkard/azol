@@ -4,6 +4,7 @@ import logging
 from azol.constants import FOCIClients, known_client_redirect_uris
 from azol.credentials.entraid_credential import EntraIdCredential
 from azol.models.ests_cookie import ESTS
+import os
 
 class User( EntraIdCredential ):
     """
@@ -37,7 +38,13 @@ class User( EntraIdCredential ):
         if username:
             self._username=username.lower()
         else:
-            self._username=username
+            # Try to get the username from an environment variable
+
+            env_username=os.getenv("azol_username")
+            if env_username == None:
+                self._username=None
+            else:
+                self._username=env_username
         self._refresh_token=refresh_token
         self._ests=ests
         self._ests_persistent=None
