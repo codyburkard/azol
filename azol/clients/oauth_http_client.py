@@ -39,8 +39,6 @@ class OAuthHTTPClient:
         self._resource = oauth_resource
         self._current_token = None
 
-        
-
         # if no specific oauth flow is provided, get the default from the credential
         if oauth_flow is None:
             oauth_flow=cred.get_default_oauth_flow()

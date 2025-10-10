@@ -74,7 +74,7 @@ class ADOWorkloadFederationCredential( EntraIdCredential ):
             Returns: azure devops service endpoint id
         """
         return self._service_endpoint_id
-    
+
     def get_system_access_token( self, var_name="SYSTEM_ACCESSTOKEN" ):
         """
             Get the system access token for the workload federation credential. 
@@ -102,7 +102,7 @@ class ADOWorkloadFederationCredential( EntraIdCredential ):
             system_access_token=os.environ.get(var_name)
         except Exception as msg:
             logging.error("could not get system access token")
-        
+
         return system_access_token
 
     def get_oidc_url( self ):
@@ -111,6 +111,5 @@ class ADOWorkloadFederationCredential( EntraIdCredential ):
             is saved in an environment variable
 
             Returns: The OIDC URL for Azure Devops
-        
         """
         return os.environ.get("SYSTEM_OIDCREQUESTURI")

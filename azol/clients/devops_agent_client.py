@@ -87,7 +87,7 @@ def _default_message_callback(decrypted_message):
                     "Accept": "application/json; api-version=7.2-preview.1",
                     "Content-Type": "application/json; charset=utf-8"
                 }
-                r=requests.post(oidc_endpoint, headers=headers, query_params=query_params)
+                r=requests.post(oidc_endpoint, headers=headers, params=query_params)
                 azol_annotations["endpoints"]["name"]["tokens"]["workloadIdentityFederationOidcToken"] = r.json()["oidcToken"]
                 logging.info("Fetching Access Tokens from ARM...")
                 authorization_server_url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
