@@ -12,7 +12,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import requests
 from pprint import pprint
 
-
 def _default_message_callback(decrypted_message):
     '''
     Default callback when polling for devops messages. Collects job data and fetches
@@ -79,32 +78,32 @@ def _default_message_callback(decrypted_message):
                 logging.info(f"Service connection is a service principal set up with workload federation, subject {subject}, issuer {issuer}.")
                 logging.info(f"Service Connection's service principal ID: {sp_id}")
                 
-            query_params = {
-                "serviceConnectionId": sc_id
-            }
-            logging.info("Fetching OIDC tokens...")
-            headers = {
-                "Authorization": f"Bearer {system_access_token}",
-                "Accept": "application/json; api-version=7.2-preview.1",
-                "Content-Type": "application/json; api-version=7.2-preview.1"
-            }
-            r=requests.post(oidc_endpoint, headers=headers, params=query_params)
-            azol_annotations["endpoints"]["name"]["tokens"]["workloadIdentityFederationOidcToken"] = r.json()["oidcToken"]
-            logging.info("Fetching Access Tokens from ARM...")
-            authorization_server_url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
-            body = {
-                "scope": "https://management.azure.com/.default",
-                "client_id": sp_id,
-                "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-                "client_assertion": r.json()["oidcToken"],
-                "grant_type": "client_credentials"
-            }
-            r=requests.post(authorization_server_url, headers=headers, data=body)
-            token = r.json()["access_token"]
-            azol_annotations["endpoints"]["name"]["tokens"]["arm_token"] = token
+                query_params = {
+                    "serviceConnectionId": sc_id
+                }
+                logging.info("Fetching OIDC tokens...")
+                headers = {
+                    "Authorization": f"Bearer {system_access_token}",
+                    "Accept": "application/json; api-version=7.2-preview.1",
+                    "Content-Type": "application/json; charset=utf-8"
+                }
+                r=requests.post(oidc_endpoint, headers=headers, params=query_params)
+                azol_annotations["endpoints"]["name"]["tokens"]["workloadIdentityFederationOidcToken"] = r.json()["oidcToken"]
+                logging.info("Fetching Access Tokens from ARM...")
+                authorization_server_url=f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+                headers = {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+                body = {
+                    "scope": "https://management.azure.com/.default",
+                    "client_id": sp_id,
+                    "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                    "client_assertion": r.json()["oidcToken"],
+                    "grant_type": "client_credentials"
+                }
+                r=requests.post(authorization_server_url, headers=headers, data=body)
+                token = r.json()["access_token"]
+                azol_annotations["endpoints"]["name"]["tokens"]["arm_token"] = token
             decrypted_message["azol_annotations"] = azol_annotations
             return decrypted_message
 
@@ -237,7 +236,6 @@ class AzureDevOpsAgentClient( object ):
             session_id = self.session_id
         if session_id == None:
             raise Exception("No session id provided, and no session ID cached by the client")
-
         self.fetch_token()
         headers = {
             "Authorization": f"Bearer {self._current_token}",
@@ -247,7 +245,6 @@ class AzureDevOpsAgentClient( object ):
         resp=requests.delete(f"https://dev.azure.com/{self.devops_org_name}"
                              f"/_apis/distributedtask/pools/{self.pool_id}"
                              f"/sessions/{session_id}", headers=headers)
-
         if resp.status_code == 200:
             self.session_id=None
 
@@ -346,12 +343,10 @@ class AzureDevOpsAgentClient( object ):
                     logging.error(resp.status_code)
                     logging.error(resp.content)
                     raise DevOpsAgentSessionCreationException()
-
                 logging.info("Got message. Deserializing to json...")
                 message_json = resp.json()
 
                 logging.info("Trying to decrypt...")
-
                 iv_b64 = message_json["iv"]
                 iv=base64.b64decode(iv_b64)
                 encrypted_b64_message=message_json["body"]
@@ -366,11 +361,9 @@ class AzureDevOpsAgentClient( object ):
 
                 plaintext = unpadder.update(plaintext) + unpadder.finalize()
                 decrypted_message=json.loads(plaintext)
-
                 logging.info("Sending message to callback...")
                 yield message_callback(decrypted_message)
                 number_messages_received += 1
 
             except requests.exceptions.Timeout:
                 logging.info("No new messages.")
-

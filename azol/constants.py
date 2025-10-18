@@ -37,6 +37,7 @@ class OAuthResourceIDs:
         A data class containing constant strings for OAuth flow types
     """
     Arm="https://management.azure.com"
+    ArmLegacy="https://management.core.windows.net"
     Graph="https://graph.microsoft.com"
     KeyVault="https://vault.azure.net"
     CosmosDB="https://cosmos.azure.com"
@@ -2399,10 +2400,11 @@ class FOCIClients:
     OutlookLite="e9b154d0-7658-433b-bb25-6b8e0a8a7c59"
 
 known_client_redirect_uris={
-    "c44b4083-3bb0-49c1-b47d-974e53cbdf3c": "https://portal.azure.com/signin/index/",
-    "1fec8e78-bce4-4aaf-ab1b-5451cc387264":"https://login.microsoftonline.com/common/oauth2/nativeclient",
-    "1950a258-227b-4e31-a9cf-717495945fc2": "http://localhost:8400",
-    "04b07795-8ddb-461a-bbee-02f9e1bf7b46": "http://localhost:21282"
+    "c44b4083-3bb0-49c1-b47d-974e53cbdf3c": [ "https://login.microsoftonline.com/common/oauth2/nativeclient",
+                                              "https://portal.azure.com/signin/index/" ],
+    "1fec8e78-bce4-4aaf-ab1b-5451cc387264": [ "https://login.microsoftonline.com/common/oauth2/nativeclient" ],
+    "1950a258-227b-4e31-a9cf-717495945fc2": [ "http://localhost:8400" ],
+    "04b07795-8ddb-461a-bbee-02f9e1bf7b46": [ "http://localhost:21282" ]
 }
 
 @dataclass(frozen=True)

@@ -8,7 +8,6 @@ from azol.clients.kudu_client import KuduClient
 from azol.clients.devops_agent_client import AzureDevOpsAgentClient
 from azol.clients.azure_devops_client import AzureDevOpsClient
 
-
 __all__ = [
     "ArmClient",
     "GraphClient",

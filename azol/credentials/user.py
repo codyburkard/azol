@@ -4,6 +4,7 @@ import logging
 from azol.constants import FOCIClients, known_client_redirect_uris
 from azol.credentials.entraid_credential import EntraIdCredential
 from azol.models.ests_cookie import ESTS
+import os
 
 class User( EntraIdCredential ):
     """
@@ -16,8 +17,7 @@ class User( EntraIdCredential ):
     default_oauth_flow="device_code"
 
     def __init__( self, username=None, refresh_token=None, ests=None,
-                 ests_persistent=None, redirect_uri=None,
-                 client_id=FOCIClients.MicrosoftAzurePowershell,  
+                 ests_persistent=None, client_id=FOCIClients.MicrosoftAzurePowershell,
                   *args, **kwargs ):
         """
             User objects always have a username, pasword and refresh token. 
@@ -28,6 +28,8 @@ class User( EntraIdCredential ):
             If an ests cookies is provided, it will be overridden if an ests
             cookies is also found for the user in the cache. to avoid this, 
             consider useing use_persistent_cache=False
+
+            If use_token_broker is set to "True", 
         """
 
         super().__init__( *args, **kwargs)
@@ -36,13 +38,18 @@ class User( EntraIdCredential ):
         if username:
             self._username=username.lower()
         else:
-            self._username=username
+            # Try to get the username from an environment variable
+
+            env_username=os.getenv("azol_username")
+            if env_username == None:
+                self._username=None
+            else:
+                self._username=env_username
         self._refresh_token=refresh_token
         self._ests=ests
         self._ests_persistent=None
 
         self._client_id=client_id
-        self._redirect_uri=redirect_uri
 
     def username_is_known( self ):
         """

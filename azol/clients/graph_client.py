@@ -431,19 +431,29 @@ class GraphClient( OAuthHTTPClient ):
         res = sum(res_list, [])
         return res
 
-    async def _get_all_service_principals_async(self, select=[]):
-        select_list = ",".join(select)
+    async def _get_all_service_principals_async(self, select=[], *args, **kwargs):
+        '''
+            Internal asynchronous method for fetching all service principals. 
+
+            This method uses the "startsWith" odata filter to start 16 parallel request streams,
+            each polling for service principals whose app IDs start with one of 0-f.
+
+            Note that the graph api does not support both the $expand operation and $filter operation
+            for service principals, so the "owners" argument is ignored if fast=true
+
+        '''
+        select = ",".join(select)
         loop = asyncio.get_event_loop()
         threads=[]
         buckets=["a", "b", "c", "d", "e", "f", "0", "1", "2", "3", "4", "5", "6","7","8","9"]
         for bucket in buckets:
-            task=loop.run_in_executor(None, self._get_all_service_principals_fast, select_list, f"startsWith(appId,'{bucket}')")
+            task=loop.run_in_executor(None, self._get_all_service_principals_fast, select, f"startsWith(appId,'{bucket}')")
             threads.append(task)
         res_list=await asyncio.gather(*threads)
         res = sum(res_list, [])
         return res
 
-    def _get_all_service_principals_fast( self, select_string, filter_string=None ):
+    def _get_all_service_principals_fast( self, select_string, filter_string ):
         query_params = {}
         query_params["$count"] = "true"
         query_params["$filter"] = filter_string
@@ -468,6 +478,9 @@ class GraphClient( OAuthHTTPClient ):
            Collect all attributes by setting select to None. Note that if owners
            is set to true and select is set to None, the full  owner
            objects will be returned due to limitiations in the Graph OData API.
+
+           Note that the graph api does not support both the $expand operation and $filter operation
+           for service principals, so the "owners" argument is ignored if fast=true
 
         Args:
             select - (list) - A list of json attributes that should be returned from all  service principals.

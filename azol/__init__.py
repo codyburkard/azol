@@ -5,10 +5,9 @@ from azol.constants import ( AZOL_HOME, PROVIDER_CACHE_DIR, PROVIDER_CACHE,
                              FOCIClients )
 from azol.clients import ( KeyVaultClient, ArmClient, OAuthHTTPClient, GraphClient,
                            DataFactoryClient, KuduClient, AzureDevOpsAgentClient,
-                           AzureDevopAzureDevOpsClientsClient )
-
+                           AzureDevOpsClient )
 from azol.credentials import ( User, ApplicationObject, ServicePrincipal, AccessToken,
-                             DevOpsAgentCredential )
+                             DevOpsAgentCredential, ADOWorkloadFederationCredential )
 from azol.utils import *
 from azol.providers import KeyVaultProvider, FileSecretProvider
 
@@ -45,5 +44,6 @@ __all__ = [
     "create_signed_easy_auth_token",
     "get_easy_auth_user_tokens",
     "KeyVaultProvider",
-    "FileSecretProvider"
+    "FileSecretProvider",
+    "ADOWorkloadFederationCredential"
 ]
