@@ -4,6 +4,8 @@ from azol.clients.oauth_http_client import OAuthHTTPClient
 from azol.constants import GRAPHBETAURL, OAuthResourceIDs, roleNameMap, appPermissionNameMap
 import asyncio
 import string
+import uuid
+import re
 
 class GraphRequestFailedException(Exception):
     """
@@ -19,12 +21,6 @@ class GraphClient( OAuthHTTPClient ):
     def __init__( self, *args, base_url=GRAPHBETAURL, **kwargs ):
         super().__init__(  oauth_resource=OAuthResourceIDs.Graph, base_url=base_url, *args, **kwargs )
 
-    def _send_request( self, *args, success_code=200, **kwargs ):
-        response = super()._send_request(*args, **kwargs)
-        if response.status_code != success_code:
-            logging.error( "Error on GRAPH API request. Raw error: %s ", str(response.content))
-            raise GraphRequestFailedException()
-        return response
 
     def _get_all_graph_objects(self, response):
         """Get all objects from graph api request
@@ -408,6 +404,78 @@ class GraphClient( OAuthHTTPClient ):
         if response:
             return self._get_all_graph_objects(response)
         raise GraphRequestFailedException()
+
+    def get_all_mail(self, user, select=[], expand=None, filter=None ):
+
+        try:
+            # Check if an object ID was provided
+            uuid.UUID(user)
+            parameter_type = "object_id"
+        except ValueError:
+            # Check if this is an email
+            pattern = r'^[a-zA-Z0-9._#%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if re.match(pattern, user) is not None:
+                parameter_type = "upn"
+            else:
+                raise ValueError("The provided value of user is not a valid guid or upn")
+
+        if parameter_type == "object_id":
+            request_builder = self._create_request_builder()
+            
+            request_builder.set_method("GET")
+            request_builder.set_path(f"/users/{user}/messages")
+            request_builder.add_odata_select_parameter(select)
+            request_builder.set_odata_expand_parameter(expand)
+            request_builder.set_odata_filter_parameter(filter)
+            request = request_builder.build()
+
+        elif parameter_type == "upn":
+            request_builder = self._create_request_builder()
+            
+            request_builder.set_method("GET")
+            request_builder.set_path(f"/users(userPrincipalName='{user}')/messages")
+            request_builder.add_odata_select_parameter(select)
+            request_builder.set_odata_expand_parameter(expand)
+            request_builder.set_odata_filter_parameter(filter)
+            request = request_builder.build()
+
+        response=self._send_request(request)
+        return response.json()
+
+    def get_user(self, user, select=[], expand=None):
+
+        try:
+            # Check if an object ID was provided
+            uuid.UUID(user)
+            parameter_type = "object_id"
+        except ValueError:
+            # Check if this is an email
+            pattern = r'^[a-zA-Z0-9._#%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if re.match(pattern, user) is not None:
+                parameter_type = "upn"
+            else:
+                raise ValueError("The provided value of user is not a valid guid or upn")
+
+        if parameter_type == "object_id":
+            request_builder = self._create_request_builder()
+            
+            request_builder.set_method("GET")
+            request_builder.set_path(f"/users/{user}")
+            request_builder.add_odata_select_parameter(select)
+            request_builder.set_odata_expand_parameter(expand)
+            request = request_builder.build()
+
+        elif parameter_type == "upn":
+            request_builder = self._create_request_builder()
+            
+            request_builder.set_method("GET")
+            request_builder.set_path(f"/users(userPrincipalName='{user}')")
+            request_builder.add_odata_select_parameter(select)
+            request_builder.set_odata_expand_parameter(expand)
+            request = request_builder.build()
+
+        response=self._send_request(request)
+        return response.json()
 
     def get_all_users(self, select=[], filter=None, fast=False):
         if fast:

@@ -457,8 +457,9 @@ class AzureDevOpsClient( OAuthHTTPClient ):
 
         if raw_response.status_code != 200:
             logging.error( "ERROR while getting devops projects" )
-            logging.error( raw_response.json())
-            raise Exception("Could not fetch Azure DevOps Projects")
+            logging.error( raw_response.content )
+            raise Exception("Could not fetch Azure DevOps Projects. Turn on Python error logging" \
+                            "to see detailed response")
         return raw_response.json()["value"]
 
     def get_connection_data( self, org_name ):

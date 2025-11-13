@@ -6,6 +6,72 @@ from azol.utils import is_token_expired, get_tenant_id, parse_jwt
 from azol.services.token_service import TokenService as tService
 from azol.credentials import User
 from azol.constants import UserAgents, OAUTHFLOWS, known_client_redirect_uris
+from urllib.parse import urljoin, urlencode, urlunparse
+
+from requests import Request, Session
+
+class RequestBuilder(object):
+
+    def __init__(self, base_url, method="GET", path=None, 
+                 body={}, headers={}, params={}, content_type="application/json"):
+        self.base_url=base_url
+        self.path=path
+        self.method=method
+        self.body=body
+        self.content_type=content_type
+        self.headers=headers
+        self.params=params
+    
+    def set_method( self, method ):
+        self.method=method
+
+    def set_odata_expand_parameter(self, expand):
+        self.params["$count"] = "true"
+        self.params["$expand"] = expand
+
+    def set_odata_filter_parameter(self, filter):
+        self.params["$count"] = "true"
+        self.params["$filter"] = filter
+
+    def add_odata_select_parameter(self, select):
+        if select != [] and select != None:
+            select_param = ",".join(select)
+            if "$select" not in self.params.keys():
+                self.params["$select"] = select_param
+            else:
+                self.params["$select"] += f",{select_param}"
+
+    def set_query_parameter( self, parameter, value ):
+        self.params[parameter]=value
+
+    def set_content_type( self, content_type ):
+        self.content_type=content_type
+    
+    def set_path( self, path ):
+        self.path = path
+    
+    def set_header( self, header_name, header_value):
+        self.headers[header_name] = header_value
+    
+    def set_body_parameter( self, parameter_name, parameter_value):
+        self.body[parameter_name] = parameter_value
+    
+    def build( self ):
+        url = self.base_url + self.path
+        if self.body != {}:
+            if "application/json" in self.content_type:
+                request = Request( method=self.method, url=url, headers=self.headers,
+                                   json=self.body, params=self.params)
+            else:
+                merged_headers = self.headers.copy()
+                merged_headers["Content-Type"] = self.content_type
+                request = Request( method=self.method, url=url, headers=merged_headers,
+                                   data=self.body, params=self.params)
+        else:
+            request = Request( method=self.method, url=url, headers=self.headers,
+                               params=self.params)
+        return request.prepare()
+
 
 class OAuthHTTPClient:
     """
@@ -26,18 +92,15 @@ class OAuthHTTPClient:
                 if cred.username_is_known():
                     username=cred.get_username()
                     tenant=username.split("@")[1]
+        self._http_session=Session()
         self.use_token_broker=use_token_broker
-        self.scopes=scopes
         self._useragent=useragent
-        self.default_scope=True
-        self.profile_scope=True
-        self.openid_scope=True
-        self.offline_access_scope=True
-        self._baseurl = base_url
 
+        self._baseurl = base_url
         self._tenant = tenant
-        self._resource = oauth_resource
         self._current_token = None
+        self._auto_refresh=auto_refresh
+        
 
         # if no specific oauth flow is provided, get the default from the credential
         if oauth_flow is None:
@@ -59,20 +122,23 @@ class OAuthHTTPClient:
                                     use_token_broker=use_token_broker,
                                     secrets_provider=secrets_provider,
                                     use_persistent_cache=use_persistent_cache,
-                                    oauth_resource=oauth_resource, scopes=self.scopes,
-                                    default_scope=self.default_scope,
-                                    profile_scope=self.profile_scope,
-                                    openid_scope=self.openid_scope,
-                                    offline_access_scope=self.offline_access_scope,
+                                    oauth_resource=oauth_resource, scopes=scopes,
+                                    default_scope=True,
+                                    profile_scope=True, # TODO: remove these scopes and pass through to token service
+                                    openid_scope=True,
+                                    offline_access_scope=True,
                                     redirect_uri=redirect_uri,
                                     useragent=useragent )
 
         self._current_token = self.token_service.get_cached_token_if_not_expired()
 
-        self._auto_refresh=auto_refresh
+        
         if azol_id is None:
             azol_id = str(uuid.uuid4())
         self._id=azol_id
+
+    def _create_request_builder( self, base_url=None ):
+        return RequestBuilder(base_url) if base_url else RequestBuilder(self._baseurl)
 
     def get_token_claims( self ):
         """Get claims in the current token
@@ -131,11 +197,6 @@ class OAuthHTTPClient:
         """
         self._current_token=None
         self.token_service.set_scope(scopes, default, profile, offline_access, openid)
-        self.scopes=scopes
-        self.default_scope=default
-        self.profile_scope=profile
-        self.offline_access_scope=offline_access
-        self.openid_scope=openid
 
     def get_id(self):
         """
@@ -267,42 +328,27 @@ class OAuthHTTPClient:
         """
         self._current_token = token
 
-    def _send_request( self, path=None, query_parameters=None, data=None, method="GET",
-                       json=None, url=None, headers=None ):
+    def _send_request( self, request ):
         """
             Internal method. Send request
         """
-        if query_parameters is None:
-            query_parameters={}
-        if url is not None:
-            request_url = url
-        else:
-            request_url=f"{self._baseurl}{path}"
-        #current token is the token that was last set when calling "fetchAndCacheToken"
-        access_token = self.get_current_token()
-
-        if access_token is None and self._auto_refresh is False:
-            logging.error("cannot sent request because credential is not logged in yet."
-                          "call fetchAndCacheToken first")
-            raise Exception("Auto Refresh is turned off and there is no cached token")
-        elif (access_token is not None
-              and self._auto_refresh
-              and is_token_expired( self._current_token, 600 ) ):
-            # if token expires in the next 10 minutes, go get a new one and cache it locally.
-            self.fetch_token()
-        elif access_token is None and self._auto_refresh is True:
-            self.fetch_token()
-
-        access_token = self.get_current_token()
-        if headers is None:
-            headers = {'Authorization': f"Bearer {access_token}", "User-Agent": self._useragent }
-        else:
-            headers['Authorization'] = f"Bearer {access_token}" 
-            headers["User-Agent"] = self._useragent
-        resp = requests.request( method, request_url, data=data, params=query_parameters,
-                                 headers=headers, json=json, timeout=10)
+        self.fetch_token()
+        request.headers["Authorization"] = f"Bearer {self.get_current_token()}"
+        try:
+            resp = self._http_session.send(request)
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            logging.error( f"Error on request. {str(err)} " )
+            logging.debug( f"HTTP Response Body: {resp.content}" )
+            raise SystemExit(err)
+        except requests.exceptions.Timeout as err:
+            logging.error( f"Request to {resp.request.url} timed out. " )
+            raise SystemExit(err)
+        except requests.exceptions.TooManyRedirects as err:
+            logging.error( f"Request to {resp.request.url} failed with too many redirects. " )
+            raise SystemExit(err)
         return resp
-    
+
     def get( self, path, headers=None, query_parameters=None ):
         """Make a get request .
 

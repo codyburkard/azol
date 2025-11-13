@@ -49,7 +49,6 @@ def get_rsa_credentials_file():
         returns a dictionary containing the raw contents of the file.
     '''
 
-
     home_directory = get_agent_home_directory()
     if is_self_hosted():
         rsa_credentials_file = os.path.normpath( home_directory + "/.credentials_rsaparams") 
