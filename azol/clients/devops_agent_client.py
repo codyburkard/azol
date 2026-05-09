@@ -219,8 +219,6 @@ class AzureDevOpsAgentClient( object ):
         assertion  = b64_header_body + "." + signature
         return assertion
     
-
-
     def kill_session(self, session_id=None):
         '''
             Kill an existing session for this agent
