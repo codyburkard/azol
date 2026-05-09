@@ -83,8 +83,8 @@ def parse_jwt( token ):
     headerb64 = fix_padding( header )
     datab64 = fix_padding( data )
     signatureb64 = fix_padding( signature )
-    header = json.loads(base64.b64decode(headerb64).decode())
-    data = json.loads(base64.b64decode(datab64).decode())
+    header = json.loads(base64.urlsafe_b64decode(headerb64).decode())
+    data = json.loads(base64.urlsafe_b64decode(datab64).decode())
     return header, data, signatureb64
 
 def is_token_expired( token, padding_time=0 ):
