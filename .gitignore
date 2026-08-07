@@ -6,8 +6,7 @@ __pycache__/
 # C extensions
 *.so
 
-# MkDocs (local / generated — do not commit)
-docs/
+# MkDocs build output (source lives in docs/)
 site/
 
 .env.live
